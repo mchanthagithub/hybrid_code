@@ -1,0 +1,6 @@
+# Ignore build directory
+dem/cmake-build-debug
+
+# Ignore all output files
+*.vtu
+*.txt
