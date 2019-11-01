@@ -10,7 +10,7 @@ int Region::m_total_num_grains = 0;
 int Region::m_id_tracker = 0;
 bool verbose = false;
 
-Region::Region(std::vector<double> in_min, std::vector<double> in_max)
+Region::Region(std::vector<double> in_min, std::vector<double> in_max, int id)
 {
   m_region_min = in_min;
   m_region_max = in_max;
@@ -19,6 +19,7 @@ Region::Region(std::vector<double> in_min, std::vector<double> in_max)
   m_bin_size = r_mean*2.0*2.0;
   m_num_bins_x = static_cast<int>((m_region_max[0] - m_region_min[0])/m_bin_size);
   m_num_bins_y = static_cast<int>((m_region_max[1] - m_region_min[1])/m_bin_size);
+  m_region_id = id;
   std::cout<<"binsx: "<<m_num_bins_x<<" binsy: "<<m_num_bins_y<<std::endl;
 }
 
@@ -31,6 +32,7 @@ Region::Region()
   m_bin_size = r_mean*2.0*3.0;
   m_num_bins_x = static_cast<int>((m_region_max[0] - m_region_min[0])/m_bin_size);
   m_num_bins_y = static_cast<int>((m_region_max[1] - m_region_min[1])/m_bin_size);
+  m_region_id = 0;
 }
 
 void Region::generateRandomInitialPacking(double r_mean, int num_total_add)
@@ -72,12 +74,28 @@ void Region::addGrainToRegion(double x_in, double y_in, double r_in, double vx_i
   m_num_grains++;
 }
 
+void Region::addGrainToRegion(double x_in, double y_in, double r_in, double vx_in, double vy_in, double fx_in, double fy_in,
+                              std::vector<int> neighbor_list_in, std::vector<int> contact_list_in, int unique_id)
+{
+  m_q.push_back(x_in); m_q.push_back(y_in);
+  m_r.push_back(r_in);
+  m_v.push_back(vx_in); m_v.push_back(vy_in);
+  m_f.push_back(fx_in); m_f.push_back(fy_in);
+  m_neighbor_list.push_back(neighbor_list_in);
+  m_contact_list.push_back(contact_list_in);
+  m_unique_id.push_back(unique_id);
+  m_total_num_grains++;
+  // ID tracker doesn't change as it is keeping track across all Regions
+  //m_id_tracker++;
+  m_num_grains++;
+}
+
 void Region::removeGrain(int idx)
 {
-  m_q.erase(m_q.begin()+idx*2,m_q.begin()+idx*2+1);
+  m_q.erase(m_q.begin()+idx*2,m_q.begin()+idx*2+1+1);
   m_r.erase(m_r.begin()+idx);
-  m_v.erase(m_v.begin()+idx*2,m_v.begin()+idx*2+1);
-  m_f.erase(m_f.begin()+idx*2,m_f.begin()+idx*2+1);
+  m_v.erase(m_v.begin()+idx*2,m_v.begin()+idx*2+1+1);
+  m_f.erase(m_f.begin()+idx*2,m_f.begin()+idx*2+1+1);
   m_neighbor_list.erase(m_neighbor_list.begin()+idx);
   m_contact_list.erase(m_contact_list.begin()+idx);
   m_unique_id.erase(m_unique_id.begin()+idx);
@@ -86,22 +104,30 @@ void Region::removeGrain(int idx)
   m_num_grains--;
 }
 
-void Region::addGrainToRegionNeighbor(double x_in, double y_in, double r_in, double vx_in, double vy_in)
+void Region::addGrainToCollection(GrainCollection& collection, int idx)
 {
-  m_q_neighbor.push_back(x_in); m_q_neighbor.push_back(y_in);
-  m_r_neighbor.push_back(r_in);
-  m_v_neighbor.push_back(vx_in); m_v_neighbor.push_back(vy_in);
+  collection.q.push_back(m_q[idx*2]); collection.q.push_back(m_q[idx*2+1]);
+  collection.r.push_back(m_r[idx]);
+  collection.v.push_back(m_v[idx*2]); collection.v.push_back(m_v[idx*2+1]);
+  collection.f.push_back(m_f[idx*2]); collection.f.push_back(m_f[idx*2+1]);
+  collection.neighbor_list.push_back(m_neighbor_list[idx]);
+  collection.contact_list.push_back(m_contact_list[idx]);
+  collection.unique_id.push_back(m_unique_id[idx]);
+  collection.region_id.push_back(m_region_id);
+  collection.num_grains_in_collection++;
 }
 
-void Region::addGrainToMessage(int idx)
+void Region::addGrainFromCollectionToCollection(GrainCollection &collection_in, GrainCollection &collection_receive, int grain_idx)
 {
-  m_q_neighbor.push_back(m_q[idx*2]); m_q_neighbor.push_back(m_q[idx*2+1]);
-  m_r_neighbor.push_back(m_r[idx]);
-  m_v_neighbor.push_back(m_v[idx*2]); m_v_neighbor.push_back(m_v[idx*2+1]);
-  m_f_neighbor.push_back(m_f[idx*2]); m_f_neighbor.push_back(m_f[idx*2+1]);
-  m_neighbor_list_neighbor.push_back(m_neighbor_list[idx]);
-  m_contact_list_neighbor.push_back(m_contact_list[idx]);
-  m_unique_id_neighbor.push_back(m_unique_id[idx]);
+  collection_receive.q.push_back(collection_in.q[grain_idx*2]); collection_receive.q.push_back(collection_in.q[grain_idx*2+1]);
+  collection_receive.r.push_back(collection_in.r[grain_idx]);
+  collection_receive.v.push_back(collection_in.v[grain_idx*2]); collection_receive.v.push_back(collection_in.v[grain_idx*2+1]);
+  collection_receive.f.push_back(collection_in.f[grain_idx*2]); collection_receive.f.push_back(collection_in.f[grain_idx*2+1]);
+  collection_receive.neighbor_list.push_back(collection_in.neighbor_list[grain_idx]);
+  collection_receive.contact_list.push_back(collection_in.contact_list[grain_idx]);
+  collection_receive.unique_id.push_back(collection_in.unique_id[grain_idx]);
+  collection_receive.region_id.push_back(collection_in.region_id[grain_idx]);
+  collection_receive.num_grains_in_collection++;
 }
 
 void Region::findNeighborsBruteForce(double delta)
@@ -315,11 +341,24 @@ void Region::forwardEuler(double delta_t)
   }
 }
 
-// dir = 1 -> x, 2 -> y, 3 -> z. negative value: check west/south boundary, positive check east/north boundary
-void Region::buildCommunicationMessage(int& dir, double& cutoff)
+void Region::clearCollectionData(GrainCollection& collection)
 {
-  // Clear old messages
-  clearMessageData();
+  collection.q.clear();
+  collection.r.clear();
+  collection.v.clear();
+  collection.f.clear();
+  collection.unique_id.clear();
+  collection.neighbor_list.clear();
+  collection.contact_list.clear();
+  collection.num_grains_in_collection = 0;
+}
+
+// dir = 1 -> x, 2 -> y, 3 -> z. negative value: check west/south boundary, positive check east/north boundary
+void Region::buildCommunicationMessage(GrainCollection& message, int& dir, double& cutoff)
+{
+  // Clear old messages; this may not be necessary if the object is being created and destroyed due to variable scope
+  // Keep for safety
+  clearCollectionData(message);
   int sign = (dir < 0)?-1:1;
   bool eastwest = (abs(dir) == 1);
   bool northsouth = (abs(dir) == 2);
@@ -336,20 +375,20 @@ void Region::buildCommunicationMessage(int& dir, double& cutoff)
     double r = m_r[grain_num];
 
     if(sign == -1) {
+      // First check if grain has left the boundaries
       if(q[dir_idx] < m_region_min[dir_idx]) {
-        // First check if grain has left the boundaries
         idx_to_del.push_back(grain_num);
-        addGrainToMessage(grain_num);
+        addGrainToCollection(message, grain_num);
       } else if (q[dir_idx] - r < m_region_min[dir_idx] + cutoff) {
-        addGrainToMessage(grain_num);
+        addGrainToCollection(message, grain_num);
       }
     } else if (sign == 1 ) {
-      if(dir_idx > m_region_max[dir_idx]) {
-        // First check if grain has left the boundaries
+      // First check if grain has left the boundaries
+      if(q[dir_idx] > m_region_max[dir_idx]) {
         idx_to_del.push_back(grain_num);
-        addGrainToMessage(grain_num);
+        addGrainToCollection(message, grain_num);
       } else if (dir_idx + r > m_region_max[0] - cutoff) {
-        addGrainToMessage(grain_num);
+        addGrainToCollection(message, grain_num);
       }
     }
   }
@@ -362,18 +401,26 @@ void Region::buildCommunicationMessage(int& dir, double& cutoff)
   }
 }
 
-void Region::clearMessageData()
+void Region::receiveCommunicationMessage(GrainCollection& in_message)
 {
-  m_q_message.clear();
-  m_r_message.clear();
-  m_v_message.clear();
-  m_f_message.clear();
-  m_unique_id_message.clear();
-  m_neighbor_list_message.clear();
-  m_contact_list_message.clear();
-}
+  for(int grain_num = 0; grain_num < in_message.num_grains_in_collection; grain_num++) {
+    double x_coord = in_message.q[grain_num*2];
+    double y_coord = in_message.q[grain_num*2+1];
+    double r = in_message.r[grain_num];
+    double vx = in_message.v[grain_num*2];
+    double vy = in_message.v[grain_num*2+1];
+    double fx = in_message.f[grain_num*2];
+    double fy = in_message.f[grain_num*2+1];
+    std::vector<int> neighbor_list = in_message.neighbor_list[grain_num];
+    std::vector<int> contact_list = in_message.contact_list[grain_num];
+    int unique_id = in_message.unique_id[grain_num];
 
-void Region::receiveCommunicationMessage()
-{
+    // Check if grain is inside the current region
+    if(x_coord > m_region_min[0] && x_coord < m_region_max[0] && y_coord > m_region_min[1] && y_coord < m_region_max[1]) {
+      addGrainToRegion(x_coord,y_coord,r,vx,vy,fx,fy,neighbor_list,contact_list,unique_id);
+    } else { // Add to neighbor list
+      addGrainToCollection(m_neighbor_collection,grain_num);
+    }
+  }
 
 }

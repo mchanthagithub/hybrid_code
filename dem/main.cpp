@@ -16,8 +16,8 @@ int main() {
   std::vector<double> region2_min{2.0,0.0};
   std::vector<double> region2_max{4.0,10.5};
 
-  Region region1(region1_min,region1_max);
-  Region region2(region2_min,region2_max);
+  Region region1(region1_min,region1_max,0);
+  Region region2(region2_min,region2_max,1);
 
   int num_regions_y = 1;
   int num_regions_x = 2;
@@ -57,22 +57,19 @@ int main() {
     std::cout<<"t: "<<t<<std::endl;
     step_num++;
 
-    // Communication between regions
-    // Communication east-west
-    //for(int x_dir = -1; x_dir < 2; x_dir+=2) {
-    //  for(int region = 0; region < num_regions; region++){
-    //    region_list[region] -> buildCommunicationBuffer()
-    //  }
-    //}
-    // Communication north-south
-    //for(int x_dir = -1; x_dir < 2; x_dir+=2) {
-    //}
-
     // Hardcode communication for now
     int right_dir = 1, left_dir = -1;
-    region_list[1] -> buildCommunicationMessage(left_dir,delta);
+    auto start_comms = std::chrono::high_resolution_clock::now();
+    GrainCollection message1;
+    region_list[1] -> buildCommunicationMessage(message1,left_dir,delta);
+    region_list[0] -> receiveCommunicationMessage(message1);
 
-
+    GrainCollection message2;
+    region_list[0] -> buildCommunicationMessage(message2,right_dir,delta);
+    region_list[1] -> receiveCommunicationMessage(message2);
+    auto stop_comms = std::chrono::high_resolution_clock::now();
+    auto duration_comms = std::chrono::duration_cast<std::chrono::microseconds>(stop_comms - start_comms);
+    std::cout<<"comms:        "<<duration_comms.count()<<std::endl;
 
     // Simulation in each region
     for(int region = 0; region < num_regions; region++){
@@ -93,7 +90,7 @@ int main() {
         region_list[region]->findNeighborsFromBins(delta);
         auto stop_neighbor_bin = std::chrono::high_resolution_clock::now();
         auto duration_neighbor_bin = std::chrono::duration_cast<std::chrono::microseconds>(stop_neighbor_bin - start_neighbor_bin);
-        std::cout<<"bin: "<<duration_neighbor_bin.count()<<std::endl;
+        std::cout<<"bin         : "<<duration_neighbor_bin.count()<<std::endl;
       }
       region_list[region]->buildContactList();
       region_list[region]->calculateContactForces();
