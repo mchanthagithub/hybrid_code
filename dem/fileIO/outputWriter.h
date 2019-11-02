@@ -10,7 +10,7 @@
 
 void writeRegionVTU(std::string file_name, std::vector<double>& grid_min, std::vector<double>& grid_max);
 void writeGrainsVTU(std::string file_name, std::vector<double>& q, std::vector<double>& v, std::vector<double>& r,
-                    std::vector<int>& unique_id);
+                    std::vector<int>& unique_id, std::vector<double>& f);
 
 std::string generateOutputFileStr(std::string prefix, int freq, double t_f, double dt, int& output_num);
 

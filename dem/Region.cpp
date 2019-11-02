@@ -37,7 +37,7 @@ Region::Region()
 
 void Region::generateRandomInitialPacking(double r_mean, int num_total_add)
 {
-  double r_min = r_mean*0.85, r_max = r_mean*1.15;
+  double r_min = r_mean*0.999, r_max = r_mean*1.001;
   std::cout<<"r range: "<<r_min<<" "<<r_mean<<" "<<r_max<<std::endl;
   double x_in = r_max + m_region_min[0];
   double y_in = r_max + m_region_min[1];
@@ -84,7 +84,7 @@ void Region::addGrainToRegion(double x_in, double y_in, double r_in, double vx_i
   m_neighbor_list.push_back(neighbor_list_in);
   m_contact_list.push_back(contact_list_in);
   m_unique_id.push_back(unique_id);
-  m_total_num_grains++;
+  //m_total_num_grains++;
   // ID tracker doesn't change as it is keeping track across all Regions
   //m_id_tracker++;
   m_num_grains++;
@@ -92,6 +92,7 @@ void Region::addGrainToRegion(double x_in, double y_in, double r_in, double vx_i
 
 void Region::removeGrain(int idx)
 {
+  std::cout<<"Remove "<<idx<<" "<<m_unique_id[idx]<<" from region "<<m_region_id<<std::endl;
   m_q.erase(m_q.begin()+idx*2,m_q.begin()+idx*2+1+1);
   m_r.erase(m_r.begin()+idx);
   m_v.erase(m_v.begin()+idx*2,m_v.begin()+idx*2+1+1);
@@ -187,6 +188,44 @@ void Region::rasterizeGrainsToBins(double delta)
     }
   }
 
+  // Loop over surrounding grains
+  for(int surrounding_grain_num = 0; surrounding_grain_num < m_surrounding_collection.num_grains_in_collection; surrounding_grain_num++){
+
+    // Cache quantities
+    double q_x = m_surrounding_collection.q[surrounding_grain_num*2];
+    double q_y = m_surrounding_collection.q[surrounding_grain_num*2+1];
+    double r = m_surrounding_collection.r[surrounding_grain_num];
+    // Generate AABB for this grain
+    std::vector<double> aabb_min{q_x-r,q_y-r};
+    std::vector<double> aabb_max{q_x+r,q_y+r};
+
+    // Find IDs of bins that the AABB intersects
+    // Need additional min and max checks because neighboring grains will be above and below the region
+    std::vector<int> bin_id_min{std::max( std::min(static_cast<int>((aabb_min[0]-m_region_min[0])/m_bin_size),m_num_bins_x-1),0),
+                                std::max( std::min(static_cast<int>((aabb_min[1]-m_region_min[1])/m_bin_size),m_num_bins_y-1),0)};
+    std::vector<int> bin_id_max{std::min( std::max(static_cast<int>((aabb_max[0]-m_region_min[0])/m_bin_size),0),m_num_bins_x-1),
+                                std::min( std::max(static_cast<int>((aabb_max[1]-m_region_min[1])/m_bin_size),0),m_num_bins_y-1)};
+
+    if(verbose) {
+      std::cout<<"neighbor grain: "<<surrounding_grain_num<<std::endl;
+      std::cout<<" calcminx "<<static_cast<int>((aabb_min[0]-m_region_min[0])/m_bin_size);
+      std::cout<<" calcminy "<<static_cast<int>((aabb_min[1]-m_region_min[1])/m_bin_size)<<std::endl;
+      std::cout<<" calcmaxx "<<static_cast<int>((aabb_max[0]-m_region_min[0])/m_bin_size);
+      std::cout<<" calcmaxy "<<static_cast<int>((aabb_max[1]-m_region_min[1])/m_bin_size)<<std::endl;
+      std::cout<<"  minx "<<bin_id_min[0]<<" miny "<<bin_id_min[1]<<std::endl;
+      std::cout<<"  maxx "<<bin_id_max[0]<<" maxy "<<bin_id_max[1]<<std::endl;
+    }
+
+
+    for(int kk = bin_id_min[1]; kk <= bin_id_max[1]; kk++){
+      for(int ii = bin_id_min[0]; ii <= bin_id_max[0]; ii++) {
+        int bin_idx = ii + kk*m_num_bins_x;
+        m_bin_list[bin_idx].push_back(surrounding_grain_num+m_num_grains);
+      }
+    }
+  }
+
+
   if(verbose) {
     for(int bin_idx = 0; bin_idx < m_num_bins_x*m_num_bins_y; bin_idx++){
       if(m_bin_list[bin_idx].size() == 0)
@@ -205,7 +244,7 @@ void Region::rasterizeGrainsToBins(double delta)
 void Region::findNeighborsFromBins(double delta)
 {
   std::vector<std::set<int>> check_set;
-  check_set.resize(m_num_grains);
+  check_set.resize(m_num_grains+m_surrounding_collection.num_grains_in_collection);
   // Loop through all bins to see what grains intersect them
   for(int bin_idx = 0; bin_idx < m_num_bins_x*m_num_bins_y; bin_idx++){
     // Take the first grain in the bin as the one that collects the contacts
@@ -228,8 +267,9 @@ void Region::findNeighborsFromBins(double delta)
 
 }
 
-
-
+// Because surrounding grains will always have larger indexes (not unique IDs) than the grains in the region,
+// they will always show up in the neighbor lists of the grains in the region, and thus do not need to loop over
+// surrounding grains
 void Region::buildContactList()
 {
   int count = 0;
@@ -248,15 +288,33 @@ void Region::buildContactList()
     m_contact_list[grain_num].clear();
     for(int check_num = 0; check_num < m_neighbor_list[grain_num].size(); check_num++){
       int check_id = m_neighbor_list[grain_num][check_num];
+      int surround_id = check_id - m_num_grains;
 
-      double dist_squared = (m_q[grain_num*2]-m_q[check_id*2])*(m_q[grain_num*2]-m_q[check_id*2])
+      double dist_squared;
+      double r_squared;
+      if(check_id < m_num_grains) {
+        dist_squared = (m_q[grain_num*2]-m_q[check_id*2])*(m_q[grain_num*2]-m_q[check_id*2])
                           + (m_q[grain_num*2+1]-m_q[check_id*2+1])*(m_q[grain_num*2+1]-m_q[check_id*2+1]);
-      double r_squared = (m_r[grain_num] + m_r[check_id]) * (m_r[grain_num] + m_r[check_id]);
+        r_squared = (m_r[grain_num] + m_r[check_id]) * (m_r[grain_num] + m_r[check_id]);
+      } else {
+        dist_squared = (m_q[grain_num*2]-m_surrounding_collection.q[surround_id*2])*(m_q[grain_num*2]-m_surrounding_collection.q[surround_id*2])
+                          + (m_q[grain_num*2+1]-m_surrounding_collection.q[surround_id*2+1])*(m_q[grain_num*2+1]-m_surrounding_collection.q[surround_id*2+1]);
+        r_squared = (m_r[grain_num] + m_surrounding_collection.r[surround_id]) * (m_r[grain_num] + m_surrounding_collection.r[surround_id]);
+      }
+
       if(dist_squared <= r_squared){
         contact_list.push_back(check_id);
         actual_contacts++;
-        if(verbose)
-          std::cout<<"grain: "<<grain_num<<" check: "<<check_id<<" y1 "<<m_q[grain_num*2+1]<<" y2 "<<m_q[check_id*2+1]<<" r1 "<<m_r[grain_num]<<" r2 "<<m_r[check_id]<<std::endl;
+        if(verbose) {
+          if(check_id < m_num_grains) {
+            std::cout<<"grain: "<<grain_num<<"/"<<m_num_grains<<" check neighbor: "<<check_id<<" x1 "<<m_q[grain_num*2]<<" x2 "<<m_q[check_id*2];
+            std::cout<<" r1 "<<m_r[grain_num]<<" r2 "<<m_surrounding_collection.r[check_id]<<std::endl;
+          }
+          else {
+            std::cout<<"grain: "<<grain_num<<"/"<<m_num_grains<<" check neighbor: "<<check_id<<" y1 "<<m_q[grain_num*2+1]<<" y2 "<<m_surrounding_collection.q[surround_id*2+1];
+            std::cout<<" r1 "<<m_r[grain_num]<<" r2 "<<m_surrounding_collection.r[surround_id]<<std::endl;
+          }
+        }
       }
     }
     m_contact_list[grain_num] = contact_list;
@@ -279,25 +337,57 @@ void Region::buildContactList()
 
 void Region::calculateContactForces()
 {
+  // Zero out force
+  std::fill(m_f.begin(), m_f.end(), 0.0);
+
   for(int grain_num = 0; grain_num < m_num_grains; grain_num++){
     for(int contact_num = 0; contact_num < m_contact_list[grain_num].size(); contact_num++){
       int check_id = m_contact_list[grain_num][contact_num];
 
-      double dist_squared = (m_q[grain_num*2]-m_q[check_id*2])*(m_q[grain_num*2]-m_q[check_id*2])
+      if(check_id < m_num_grains) {
+        double dist_squared = (m_q[grain_num*2]-m_q[check_id*2])*(m_q[grain_num*2]-m_q[check_id*2])
                           + (m_q[grain_num*2+1]-m_q[check_id*2+1])*(m_q[grain_num*2+1]-m_q[check_id*2+1]);
-      double dist = sqrt(dist_squared);
-      double r_squared = (m_r[grain_num] + m_r[check_id]) * (m_r[grain_num] + m_r[check_id]);
+        double r_squared = (m_r[grain_num] + m_r[check_id]) * (m_r[grain_num] + m_r[check_id]);
 
-      double overlap = sqrt(r_squared - dist_squared);
-      std::vector<double> n{0.0,0.0};
-      n[0] = (m_q[check_id*2] - m_q[grain_num*2])/dist;
-      n[1] = (m_q[check_id*2+1] - m_q[grain_num*2+1])/dist;
+        double dist = sqrt(dist_squared);
 
-      m_f[grain_num*2] -= n[0]*overlap*k;
-      m_f[grain_num*2+1] -= n[1]*overlap*k;
+        double overlap = sqrt(r_squared - dist_squared);
+        std::vector<double> n{0.0,0.0};
+        n[0] = (m_q[check_id*2] - m_q[grain_num*2])/dist;
+        n[1] = (m_q[check_id*2+1] - m_q[grain_num*2+1])/dist;
 
-      m_f[check_id*2] += n[0]*overlap*k;
-      m_f[check_id*2+1] += n[1]*overlap*k;
+        m_f[grain_num*2] -= n[0]*overlap*k;
+        m_f[grain_num*2+1] -= n[1]*overlap*k;
+
+        m_f[check_id*2] += n[0]*overlap*k;
+        m_f[check_id*2+1] += n[1]*overlap*k;
+        if(verbose) {
+          std::cout<<"F btwn "<<grain_num<<","<<check_id<<" overlap "<<overlap<<" n0 "<<n[0]<<" n1 "<<n[1]<<" f1x "<<m_f[grain_num*2]<<" f1y "<<m_f[grain_num*2+1]<<std::endl;
+          std::cout<<" f2x "<<m_f[check_id*2]<<" f2y "<<m_f[check_id*2+1]<<std::endl;
+        }
+
+
+      } else {
+        int surround_id = check_id - m_num_grains;
+        double dist_squared = (m_q[grain_num*2]-m_surrounding_collection.q[surround_id*2])*(m_q[grain_num*2]-m_surrounding_collection.q[surround_id*2])
+                          + (m_q[grain_num*2+1]-m_surrounding_collection.q[surround_id*2+1])*(m_q[grain_num*2+1]-m_surrounding_collection.q[surround_id*2+1]);
+        double r_squared = (m_r[grain_num] + m_surrounding_collection.r[surround_id]) * (m_r[grain_num] + m_surrounding_collection.r[surround_id]);
+
+        double dist = sqrt(dist_squared);
+
+        double overlap = sqrt(r_squared - dist_squared);
+        std::vector<double> n{0.0,0.0};
+        n[0] = (m_surrounding_collection.q[surround_id*2] - m_q[grain_num*2])/dist;
+        n[1] = (m_surrounding_collection.q[surround_id*2+1] - m_q[grain_num*2+1])/dist;
+
+        if(verbose)
+          std::cout<<"F surround btwn "<<grain_num<<","<<surround_id<<" overlap "<<overlap<<" n0 "<<n[0]<<" n1 "<<n[1]<<std::endl;
+
+        // Only apply forces on grain in the region
+        m_f[grain_num*2] -= n[0]*overlap*k;
+        m_f[grain_num*2+1] -= n[1]*overlap*k;
+      }
+
     }
     // Check against floor
     if(m_q[grain_num*2+1]-m_r[grain_num] <= 0.0)
@@ -336,8 +426,8 @@ void Region::forwardEuler(double delta_t)
     m_v[grain_num*2+1] += delta_t*m_f[grain_num*2+1]/mass;
     m_q[grain_num*2] += delta_t*m_v[grain_num*2];
     m_q[grain_num*2+1] += delta_t*m_v[grain_num*2+1];
-    m_f[grain_num*2] = 0.0;
-    m_f[grain_num*2+1] = 0.0;
+    //m_f[grain_num*2] = 0.0;
+    //m_f[grain_num*2+1] = 0.0;
   }
 }
 
@@ -350,6 +440,7 @@ void Region::clearCollectionData(GrainCollection& collection)
   collection.unique_id.clear();
   collection.neighbor_list.clear();
   collection.contact_list.clear();
+  collection.region_id.clear();
   collection.num_grains_in_collection = 0;
 }
 
@@ -387,7 +478,7 @@ void Region::buildCommunicationMessage(GrainCollection& message, int& dir, doubl
       if(q[dir_idx] > m_region_max[dir_idx]) {
         idx_to_del.push_back(grain_num);
         addGrainToCollection(message, grain_num);
-      } else if (dir_idx + r > m_region_max[0] - cutoff) {
+      } else if (q[dir_idx] + r > m_region_max[dir_idx] - cutoff) {
         addGrainToCollection(message, grain_num);
       }
     }
@@ -418,9 +509,8 @@ void Region::receiveCommunicationMessage(GrainCollection& in_message)
     // Check if grain is inside the current region
     if(x_coord > m_region_min[0] && x_coord < m_region_max[0] && y_coord > m_region_min[1] && y_coord < m_region_max[1]) {
       addGrainToRegion(x_coord,y_coord,r,vx,vy,fx,fy,neighbor_list,contact_list,unique_id);
-    } else { // Add to neighbor list
-      addGrainToCollection(m_neighbor_collection,grain_num);
+    } else { // Add to surrounding grains
+      addGrainFromCollectionToCollection(in_message,m_surrounding_collection,grain_num);
     }
   }
-
 }

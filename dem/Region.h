@@ -8,6 +8,7 @@
 #include <vector>
 #include <iostream>
 #include <cmath>
+#include <assert.h>
 
 // Data structure to hold a collection of grains. Can be used as a message between regions
 // or as way to hold all neighbor grain data
@@ -104,11 +105,11 @@ public:
   static int m_total_num_grains; // Lives across all regions
   static int m_id_tracker; // Lives across all regions so ID is unique across all regions
 
-  // Quantities for neighboring grains
-  GrainCollection m_neighbor_collection;
+  // Quantities for surrounding grains
+  GrainCollection m_surrounding_collection;
 
   // Material parameters
-  double k = 100000.0;
+  double k = 1000000.0;
   double eta = 4.0;
   double m_rho = 2600;
 };

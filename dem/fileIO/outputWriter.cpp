@@ -97,7 +97,7 @@ void writeRegionVTU(std::string file_name, std::vector<double>& grid_min, std::v
 }
 
 void writeGrainsVTU(std::string file_name, std::vector<double>& q, std::vector<double>& v, std::vector<double>& r,
-                    std::vector<int>& unique_id)
+                    std::vector<int>& unique_id,std::vector<double>& f)
 {
   std::cout<<"Writing grains VTU"<<std::endl;
   std::ofstream fp;
@@ -129,6 +129,10 @@ void writeGrainsVTU(std::string file_name, std::vector<double>& q, std::vector<d
   fp <<"    <DataArray type=\"Float32\" Name=\"Velocity\" NumberOfComponents=\"3\" format=\"ascii\">\n";
   for (int kk = 0; kk < num_pts; kk ++)
     fp <<v[kk*2]<<" "<<v[kk*2+1]<<" 0.0"<<std::endl;
+  fp <<"    </DataArray>\n";
+  fp <<"    <DataArray type=\"Float32\" Name=\"NetForce\" NumberOfComponents=\"3\" format=\"ascii\">\n";
+  for (int kk = 0; kk < num_pts; kk ++)
+    fp <<f[kk*2]<<" "<<f[kk*2+1]<<" 0.0"<<std::endl;
   fp <<"    </DataArray>\n";
   fp <<"   </PointData>\n";
 
