@@ -79,6 +79,8 @@ public:
 
   void receiveCommunicationMessage(GrainCollection& in_message);
 
+  void domainDecomposition(int num_regions, std::vector<Region>& region_list);
+
 //private:
   // Unique identifier for the region
   int m_region_id;

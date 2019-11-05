@@ -4,6 +4,8 @@
 
 #include <unordered_set>
 #include <set>
+#include <cfloat>
+#include <algorithm>
 #include "Region.h"
 
 int Region::m_total_num_grains = 0;
@@ -41,7 +43,7 @@ void Region::generateRandomInitialPacking(double r_mean, int num_total_add)
   std::cout<<"r range: "<<r_min<<" "<<r_mean<<" "<<r_max<<std::endl;
   double x_in = r_max + m_region_min[0];
   double y_in = r_max + m_region_min[1];
-  double v_max = r_min*3.0, v_min = r_min*(-3.0);
+  double v_max = r_min*30.0, v_min = r_min*(-30.0);
   for(int grain = 0; grain < num_total_add; grain++) {
     double f = (double)rand() / RAND_MAX;
     double r_in = r_min + f * (r_max - r_min);
@@ -131,6 +133,128 @@ void Region::addGrainFromCollectionToCollection(GrainCollection &collection_in, 
   collection_receive.num_grains_in_collection++;
 }
 
+
+void Region::domainDecomposition(int num_regions, std::vector<Region>& region_list)
+{
+  // For now break up domain into rectangles with only single face-face connections, so must have
+  // even number of regions
+  assert(num_regions == 1 || num_regions%2 == 0);
+
+  // Find avg x coord, avg y coord, and max and min x and y coords to determine how to split up domain
+  double avg_x = 0.0, avg_y = 0.0;
+  double max_r = DBL_MIN;
+  double min_x = DBL_MAX, min_y = DBL_MAX, max_x = DBL_MIN, max_y = DBL_MIN;
+  for(int grain_num = 0; grain_num < m_num_grains; grain_num++) {
+    double x_coord = m_q[grain_num*2];
+    double y_coord = m_q[grain_num*2+1];
+    avg_x += x_coord;
+    avg_y += y_coord;
+
+    if(x_coord < min_x)
+      min_x = x_coord;
+    if(x_coord > max_x)
+      max_x = x_coord;
+    if(y_coord < min_y)
+      min_y = y_coord;
+    if(y_coord > max_y)
+      max_y = y_coord;
+
+    if(m_r[grain_num] > max_r)
+      max_r = m_r[grain_num];
+  }
+  avg_x /= m_num_grains;
+  avg_y /= m_num_grains;
+
+  double margin = 3.0;
+  min_x -= max_r*margin;
+  min_y -= max_r*margin;
+  max_x += max_r*margin;
+  max_y += max_r*margin;
+  //min_x = m_region_min[0];
+  //min_y = m_region_min[1];
+  //max_x = m_region_max[0];
+  //max_y = m_region_max[1];
+  double x_length = max_x - min_x;
+  double y_length = max_y - min_y;
+
+  std::vector<std::pair<int,int>> divisors;
+  for(int ii = 1; ii <= num_regions; ii++) {
+    if(num_regions%ii == 0) {
+      std::cout<<"ii: "<<ii<<","<<num_regions/ii<<std::endl;
+      std::pair<int,int> in_pair = std::make_pair(ii,num_regions/ii);
+      divisors.push_back(in_pair);
+    }
+  }
+
+  std::vector<int> count_in_region(num_regions,0);
+  double min_ratio = DBL_MAX;
+  int min_idx = divisors.size();
+  for(int ii = 0; ii < divisors.size(); ii++) {
+    int x_div = divisors[ii].first;
+    int y_div = divisors[ii].second;
+    double dx = x_length/x_div;
+    double dy = y_length/y_div;
+    for(int grain_num = 0; grain_num < m_num_grains; grain_num++) {
+      for(int y_idx = 0; y_idx < y_div; y_idx++) {
+        for(int x_idx = 0; x_idx < x_div; x_idx++) {
+          if(m_q[grain_num*2] >= min_x + x_idx*dx && m_q[grain_num*2] < min_x + (x_idx+1)*dx &&
+              m_q[grain_num*2+1] >= min_y + y_idx*dy && m_q[grain_num*2+1] < min_y + (y_idx+1)*dy) {
+            count_in_region[x_idx+y_idx*x_div] += 1;
+          }
+        }
+      }
+    }
+    int max_num = *std::max_element(count_in_region.begin(),count_in_region.end());
+    int min_num = *std::min_element(count_in_region.begin(),count_in_region.end());
+    if(min_num == 0)
+      continue;
+    double ratio = static_cast<double>(max_num)/min_num;
+    std::cout<<"ratio: "<<ratio<<std::endl;
+    if(ratio < min_ratio) {
+      min_ratio = ratio;
+      min_idx = ii;
+    }
+  }
+
+  std::cout<<"minidx: "<<min_idx<<" Divisions: "<<divisors[min_idx].first<<","<<divisors[min_idx].second<<std::endl;
+
+  int x_div_final = divisors[min_idx].first;
+  int y_div_final = divisors[min_idx].second;
+  double dx_final = x_length/x_div_final;
+  double dy_final = y_length/y_div_final;
+  std::vector<std::vector<int> >grain_indexes_in_regions;
+  grain_indexes_in_regions.resize(num_regions);
+  for(int grain_num = 0; grain_num < m_num_grains; grain_num++) {
+    for(int y_idx = 0; y_idx < y_div_final; y_idx++) {
+      for(int x_idx = 0; x_idx < x_div_final; x_idx++) {
+        if(m_q[grain_num*2] >= min_x + x_idx*dx_final && m_q[grain_num*2] < min_x + (x_idx+1)*dx_final &&
+            m_q[grain_num*2+1] >= min_y + y_idx*dy_final && m_q[grain_num*2+1] < min_y + (y_idx+1)*dy_final) {
+          grain_indexes_in_regions[x_idx+y_idx*x_div_final].push_back(grain_num);
+        }
+      }
+    }
+  }
+
+  for(int y_regions = 0 ; y_regions < divisors[min_idx].second; y_regions++) {
+    for(int x_regions = 0 ; x_regions < divisors[min_idx].first; x_regions++) {
+      std::vector<double> region_min = {min_x + x_regions*dx_final,min_y+y_regions*dy_final};
+      std::vector<double> region_max = {min_x + (x_regions+1)*dx_final,min_y+(y_regions+1)*dy_final};
+      int region_idx = x_regions + y_regions*divisors[min_idx].first;
+      std::cout<<"region: "<<region_idx<<" has "<<grain_indexes_in_regions[region_idx].size()<<" grains "<<std::endl;
+      std::cout<<"      minx: "<<region_min[0]<<" miny: "<<region_min[1]<<std::endl;
+      std::cout<<"      maxx: "<<region_max[0]<<" maxy: "<<region_max[1]<<std::endl;
+      Region region(region_min,region_max,region_idx);
+
+      for(int ii = 0; ii < grain_indexes_in_regions[region_idx].size(); ii++) {
+        int idx = grain_indexes_in_regions[region_idx][ii];
+        region.addGrainToRegion(m_q[idx*2],m_q[idx*2+1],m_r[idx],m_v[idx*2],m_v[idx*2+1],m_f[idx*2],m_f[idx*2+1],
+            m_neighbor_list[idx],m_contact_list[idx],m_unique_id[idx]);
+      }
+      region_list.push_back(region);
+    }
+  }
+}
+
 void Region::findNeighborsBruteForce(double delta)
 {
   for(int grain_num = 0; grain_num < m_num_grains; grain_num++){
@@ -163,15 +287,28 @@ void Region::rasterizeGrainsToBins(double delta)
     double q_x = m_q[grain_num*2];
     double q_y = m_q[grain_num*2+1];
     double r = m_r[grain_num];
+    // Inflate r by a little bit to avoid floating point issues
+    r *= 1.001;
+
     // Generate AABB for this grain
     std::vector<double> aabb_min{q_x-r,q_y-r};
     std::vector<double> aabb_max{q_x+r,q_y+r};
 
     // Find IDs of bins that the AABB intersects
+    std::vector<int> bin_id_min{std::max( std::min(static_cast<int>((aabb_min[0]-m_region_min[0])/m_bin_size),m_num_bins_x-1),0),
+                                std::max( std::min(static_cast<int>((aabb_min[1]-m_region_min[1])/m_bin_size),m_num_bins_y-1),0)};
+    std::vector<int> bin_id_max{std::min( std::max(static_cast<int>((aabb_max[0]-m_region_min[0])/m_bin_size),0),m_num_bins_x-1),
+                                std::min( std::max(static_cast<int>((aabb_max[1]-m_region_min[1])/m_bin_size),0),m_num_bins_y-1)};
+
+    /*
     std::vector<int> bin_id_min{std::max(static_cast<int>((aabb_min[0]-m_region_min[0])/m_bin_size),0),
                                 std::max(static_cast<int>((aabb_min[1]-m_region_min[1])/m_bin_size),0)};
     std::vector<int> bin_id_max{std::min(static_cast<int>((aabb_max[0]-m_region_min[0])/m_bin_size),m_num_bins_x-1),
                                 std::min(static_cast<int>((aabb_max[1]-m_region_min[1])/m_bin_size),m_num_bins_y-1)};
+    */
+
+    assert(bin_id_max[0] >= bin_id_min[0]);
+    assert(bin_id_max[1] >= bin_id_min[1]);
 
     if(verbose) {
       std::cout<<"grain: "<<grain_num<<std::endl;
@@ -195,6 +332,8 @@ void Region::rasterizeGrainsToBins(double delta)
     double q_x = m_surrounding_collection.q[surrounding_grain_num*2];
     double q_y = m_surrounding_collection.q[surrounding_grain_num*2+1];
     double r = m_surrounding_collection.r[surrounding_grain_num];
+    // Inflate r by a little bit to avoid floating point issues
+    r *= 1.001;
     // Generate AABB for this grain
     std::vector<double> aabb_min{q_x-r,q_y-r};
     std::vector<double> aabb_max{q_x+r,q_y+r};
@@ -205,6 +344,9 @@ void Region::rasterizeGrainsToBins(double delta)
                                 std::max( std::min(static_cast<int>((aabb_min[1]-m_region_min[1])/m_bin_size),m_num_bins_y-1),0)};
     std::vector<int> bin_id_max{std::min( std::max(static_cast<int>((aabb_max[0]-m_region_min[0])/m_bin_size),0),m_num_bins_x-1),
                                 std::min( std::max(static_cast<int>((aabb_max[1]-m_region_min[1])/m_bin_size),0),m_num_bins_y-1)};
+
+    assert(bin_id_max[0] >= bin_id_min[0]);
+    assert(bin_id_max[1] >= bin_id_min[1]);
 
     if(verbose) {
       std::cout<<"neighbor grain: "<<surrounding_grain_num<<std::endl;
@@ -475,7 +617,7 @@ void Region::buildCommunicationMessage(GrainCollection& message, int& dir, doubl
       }
     } else if (sign == 1 ) {
       // First check if grain has left the boundaries
-      if(q[dir_idx] > m_region_max[dir_idx]) {
+      if(q[dir_idx] >= m_region_max[dir_idx]) {
         idx_to_del.push_back(grain_num);
         addGrainToCollection(message, grain_num);
       } else if (q[dir_idx] + r > m_region_max[dir_idx] - cutoff) {
@@ -507,7 +649,7 @@ void Region::receiveCommunicationMessage(GrainCollection& in_message)
     int unique_id = in_message.unique_id[grain_num];
 
     // Check if grain is inside the current region
-    if(x_coord > m_region_min[0] && x_coord < m_region_max[0] && y_coord > m_region_min[1] && y_coord < m_region_max[1]) {
+    if(x_coord >= m_region_min[0] && x_coord < m_region_max[0] && y_coord >= m_region_min[1] && y_coord < m_region_max[1]) {
       addGrainToRegion(x_coord,y_coord,r,vx,vy,fx,fy,neighbor_list,contact_list,unique_id);
     } else { // Add to surrounding grains
       addGrainFromCollectionToCollection(in_message,m_surrounding_collection,grain_num);
