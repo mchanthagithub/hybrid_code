@@ -4,4 +4,4 @@ dem/cmake-build-release
 
 # Ignore all output files
 *.vtu
-*.txt
+output*.txt
