@@ -99,7 +99,7 @@ void writeRegionVTU(std::string file_name, std::vector<double>& grid_min, std::v
 void writeGrainsVTU(std::string file_name, std::vector<double>& q, std::vector<double>& v, std::vector<double>& r,
                     std::vector<int>& unique_id,std::vector<double>& f)
 {
-  std::cout<<"Writing grains VTU"<<std::endl;
+  //std::cout<<"Writing grains VTU"<<std::endl;
   std::ofstream fp;
   fp.open(file_name);
   //for(int ii = 0; ii < m_boundary_samples.nPoints;ii++)

@@ -28,8 +28,8 @@
       <file leaf-file-name="main.cpp" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/main.cpp">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="288">
-              <caret line="115" column="65" selection-start-line="115" selection-start-column="65" selection-end-line="115" selection-end-column="65" />
+            <state>
+              <caret line="182" column="38" selection-start-line="182" selection-start-column="38" selection-end-line="182" selection-end-column="38" />
               <folding>
                 <element signature="e#0#19#0" expanded="true" />
               </folding>
@@ -40,8 +40,8 @@
       <file leaf-file-name="Region.cpp" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/Region.cpp">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="162">
-              <caret line="45" column="46" selection-start-line="45" selection-start-column="46" selection-end-line="45" selection-end-column="46" />
+            <state>
+              <caret line="419" selection-start-line="419" selection-end-line="419" />
               <folding>
                 <element signature="e#41#65#0" expanded="true" />
               </folding>
@@ -52,8 +52,8 @@
       <file leaf-file-name="Region.h" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/Region.h">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1296">
-              <caret line="81" column="61" selection-start-line="81" selection-start-column="61" selection-end-line="81" selection-end-column="61" />
+            <state relative-caret-position="720">
+              <caret line="40" column="114" selection-start-line="40" selection-start-column="114" selection-end-line="40" selection-end-column="114" />
               <folding>
                 <element signature="e#84#101#0" expanded="true" />
               </folding>
@@ -64,8 +64,8 @@
       <file leaf-file-name="outputWriter.cpp" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/fileIO/outputWriter.cpp">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="2412">
-              <caret line="134" column="23" selection-start-line="134" selection-start-column="23" selection-end-line="134" selection-end-column="23" />
+            <state relative-caret-position="1818">
+              <caret line="101" column="3" selection-start-line="101" selection-start-column="3" selection-end-line="101" selection-end-column="3" />
             </state>
           </provider>
         </entry>
@@ -95,12 +95,12 @@
     <option name="CHANGED_PATHS">
       <list>
         <option value="$PROJECT_DIR$/region.h" />
-        <option value="$PROJECT_DIR$/fileIO/outputWriter.cpp" />
         <option value="$PROJECT_DIR$/fileIO/outputWriter.h" />
         <option value="$PROJECT_DIR$/CMakeLists.txt" />
+        <option value="$PROJECT_DIR$/fileIO/outputWriter.cpp" />
         <option value="$PROJECT_DIR$/Region.h" />
-        <option value="$PROJECT_DIR$/main.cpp" />
         <option value="$PROJECT_DIR$/Region.cpp" />
+        <option value="$PROJECT_DIR$/main.cpp" />
       </list>
     </option>
   </component>
@@ -112,17 +112,16 @@
   </component>
   <component name="OCFindUsagesOptions" text="true" ivars="false" properties="true" derivedClasses="false" />
   <component name="ProjectFrameBounds">
-    <option name="x" value="57" />
-    <option name="y" value="224" />
-    <option name="width" value="1831" />
-    <option name="height" value="762" />
+    <option name="x" value="73" />
+    <option name="y" value="62" />
+    <option name="width" value="1621" />
+    <option name="height" value="753" />
   </component>
   <component name="ProjectView">
     <navigator proportions="" version="1">
       <foldersAlwaysOnTop value="true" />
     </navigator>
     <panes>
-      <pane id="Scope" />
       <pane id="ProjectPane">
         <subPane>
           <expand>
@@ -139,6 +138,7 @@
           <select />
         </subPane>
       </pane>
+      <pane id="Scope" />
     </panes>
   </component>
   <component name="PropertiesComponent">
@@ -209,20 +209,34 @@
       <workItem from="1572690865960" duration="1543000" />
       <workItem from="1572697069470" duration="1557000" />
       <workItem from="1572699637759" duration="5410000" />
-      <workItem from="1572871840642" duration="6483000" />
+      <workItem from="1572871840642" duration="27843000" />
+      <workItem from="1573152288199" duration="93000" />
+      <workItem from="1573159216646" duration="7592000" />
+      <workItem from="1573177830617" duration="2477000" />
+      <workItem from="1573229420685" duration="6668000" />
+      <workItem from="1573255830886" duration="35000" />
+      <workItem from="1573256073192" duration="109000" />
+      <workItem from="1573256743383" duration="108000" />
+      <workItem from="1573327557757" duration="1832000" />
+      <workItem from="1573338124121" duration="57000" />
+      <workItem from="1573413982661" duration="124000" />
+      <workItem from="1573414701839" duration="1071000" />
+      <workItem from="1573429555297" duration="95000" />
+      <workItem from="1573429949001" duration="592000" />
+      <workItem from="1573431280243" duration="665000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="92810000" />
+    <option name="totallyTimeSpent" value="135688000" />
   </component>
   <component name="ToolWindowManager">
-    <frame x="57" y="224" width="1831" height="762" extended-state="0" />
+    <frame x="303" y="163" width="1621" height="753" extended-state="0" />
     <editor active="true" />
     <layout>
-      <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.240852" />
+      <window_info content_ui="combo" id="Project" order="0" visible="true" weight="0.27205428" />
       <window_info anchor="bottom" id="TODO" order="6" />
-      <window_info active="true" anchor="bottom" id="Messages" order="7" visible="true" weight="0.31259483" />
+      <window_info active="true" anchor="bottom" id="Messages" order="7" visible="true" weight="0.2565688" />
       <window_info anchor="bottom" id="CMake" order="7" />
       <window_info anchor="bottom" id="Event Log" order="7" side_tool="true" />
       <window_info anchor="bottom" id="Version Control" order="7" show_stripe_button="false" />
@@ -665,13 +679,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/fileIO/outputWriter.cpp">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="2412">
-          <caret line="134" column="23" selection-start-line="134" selection-start-column="23" selection-end-line="134" selection-end-column="23" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/CMakeLists.txt">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="54">
@@ -689,10 +696,17 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/fileIO/outputWriter.cpp">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="1818">
+          <caret line="101" column="3" selection-start-line="101" selection-start-column="3" selection-end-line="101" selection-end-column="3" />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/Region.h">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="1296">
-          <caret line="81" column="61" selection-start-line="81" selection-start-column="61" selection-end-line="81" selection-end-column="61" />
+        <state relative-caret-position="720">
+          <caret line="40" column="114" selection-start-line="40" selection-start-column="114" selection-end-line="40" selection-end-column="114" />
           <folding>
             <element signature="e#84#101#0" expanded="true" />
           </folding>
@@ -701,8 +715,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/Region.cpp">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="162">
-          <caret line="45" column="46" selection-start-line="45" selection-start-column="46" selection-end-line="45" selection-end-column="46" />
+        <state>
+          <caret line="419" selection-start-line="419" selection-end-line="419" />
           <folding>
             <element signature="e#41#65#0" expanded="true" />
           </folding>
@@ -711,8 +725,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/main.cpp">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="288">
-          <caret line="115" column="65" selection-start-line="115" selection-start-column="65" selection-end-line="115" selection-end-column="65" />
+        <state>
+          <caret line="182" column="38" selection-start-line="182" selection-start-column="38" selection-end-line="182" selection-end-column="38" />
           <folding>
             <element signature="e#0#19#0" expanded="true" />
           </folding>
