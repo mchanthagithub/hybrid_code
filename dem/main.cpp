@@ -24,8 +24,8 @@ int main(int argc, char *argv[]) {
 
   // Generate initial region
   std::vector<double> global_region_min{0.0,0.0};
-  std::vector<double> global_region_max{24.0,16.0};
-  int num_total_add = 32000;
+  std::vector<double> global_region_max{36.0,18.0};
+  int num_total_add = 64000;
   std::vector<bool> is_edge{1,1,1,1};
   Region init_region(global_region_min,global_region_max,0, is_edge,bin_size);
   init_region.generateRandomInitialPacking(r_mean,num_total_add);
@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
   */
 
   double t = 0.0;
-  double t_f = 0.01;
+  double t_f = 1.0;
   double dt = 0.00001;
   int num_regions = region_list.size();
   double delta = r_mean*1.21;
@@ -196,7 +196,7 @@ int main(int argc, char *argv[]) {
 
     #pragma omp parallel for
     for(int region = 0; region < num_regions; region++) {
-      region_list[region].findNeighborsFromBins(delta);
+      region_list[region].findNeighborsFromBinsVect(delta);
     }
     double end_bins = omp_get_wtime();
 
@@ -224,7 +224,7 @@ int main(int argc, char *argv[]) {
     }
     double end_forward = omp_get_wtime();
 
-    std::cout<<end_map-start_comms<<","<<end_raster-end_map<<","<<end_bins-end_raster;
+    std::cout<<end_comms-start_comms<<","<<end_map-start_map<<","<<end_raster-end_map<<","<<end_bins-end_raster;
     std::cout<<","<<end_contact-end_bins<<","<<end_forces-end_contact;
     std::cout<<","<<end_body-end_forces<<","<<end_forward-end_body<<","<<end_forward-start_map<<std::endl;
 

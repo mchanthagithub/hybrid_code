@@ -22,6 +22,7 @@ Region::Region(std::vector<double> in_min, std::vector<double> in_max, int id, s
   m_bin_size = bin_size;
   m_num_bins_x = static_cast<int>((m_region_max[0] - m_region_min[0])/m_bin_size);
   m_num_bins_y = static_cast<int>((m_region_max[1] - m_region_min[1])/m_bin_size);
+  m_bin_list.resize(m_num_bins_x*m_num_bins_y);
   m_region_id = id;
   m_is_edge = is_edge;
   std::cout<<"binsx: "<<m_num_bins_x<<" binsy: "<<m_num_bins_y<<std::endl;
@@ -37,6 +38,7 @@ Region::Region()
   m_bin_size = r_mean*2.0*3.0;
   m_num_bins_x = static_cast<int>((m_region_max[0] - m_region_min[0])/m_bin_size);
   m_num_bins_y = static_cast<int>((m_region_max[1] - m_region_min[1])/m_bin_size);
+  m_bin_list.resize(m_num_bins_x*m_num_bins_y);
   m_region_id = 0;
 }
 
@@ -310,8 +312,9 @@ void Region::findNeighborsBruteForce(double delta)
 
 void Region::rasterizeGrainsToBins(double delta)
 {
-  m_bin_list.clear();
-  m_bin_list.resize(m_num_bins_x*m_num_bins_y);
+  for(int ii = 0; ii < m_bin_list.size();ii++)
+    m_bin_list[ii].clear();
+  //m_bin_list.resize(m_num_bins_x*m_num_bins_y);
 
   // By looping over grains and then inserting them into bins, this ensures that
   // the smallest grain ID will be first in the bin. Note that this can change if
@@ -421,12 +424,15 @@ void Region::rasterizeGrainsToBins(double delta)
 void Region::findNeighborsFromBins(double delta)
 {
   std::vector<std::set<int>> check_set;
-  check_set.resize(m_num_grains+m_surrounding_collection.num_grains_in_collection);
+  //check_set.resize(m_num_grains+m_surrounding_collection.num_grains_in_collection);
+  check_set.resize(m_num_grains);
   // Loop through all bins to see what grains intersect them
   for(int bin_idx = 0; bin_idx < m_num_bins_x*m_num_bins_y; bin_idx++){
     // Take the first grain in the bin as the one that collects the contacts
     // This assumes the grains are in ascending ID order in the bins
     for(int grain_num_1 = 0; grain_num_1 < m_bin_list[bin_idx].size(); grain_num_1++) {
+      if(m_bin_list[bin_idx][grain_num_1] >= m_num_grains)
+        continue;
       for(int grain_num_2 = grain_num_1+1; grain_num_2 < m_bin_list[bin_idx].size(); grain_num_2++){
         check_set[m_bin_list[bin_idx][grain_num_1]].insert(m_bin_list[bin_idx][grain_num_2]);
       //m_neighbor_list[m_bin_list[bin_idx][0]].push_back(m_bin_list[bin_idx][grain_num]);
@@ -436,11 +442,66 @@ void Region::findNeighborsFromBins(double delta)
   for(int ii = 0; ii < m_num_grains; ii++) {
     m_neighbor_list[ii].clear();
     if(check_set[ii].size() > 0) {
-      std::vector<int> list(check_set[ii].begin(),check_set[ii].end());
-      m_neighbor_list[ii] = list;
+      //std::vector<int> list(check_set[ii].begin(),check_set[ii].end());
+      //m_neighbor_list[ii] = list;
+      m_neighbor_list[ii].assign(check_set[ii].begin(),check_set[ii].end());
     }
   }
+}
 
+void Region::findNeighborsFromBinsVect(double delta)
+{
+  std::vector<std::vector<int>> check_set;
+  //check_set.resize(m_num_grains+m_surrounding_collection.num_grains_in_collection);
+  check_set.resize(m_num_grains);
+  // Loop through all bins to see what grains intersect them
+  for(int bin_idx = 0; bin_idx < m_num_bins_x*m_num_bins_y; bin_idx++){
+    // Take the first grain in the bin as the one that collects the contacts
+    // This assumes the grains are in ascending ID order in the bins
+    for(int grain_num_1 = 0; grain_num_1 < m_bin_list[bin_idx].size(); grain_num_1++) {
+      if(m_bin_list[bin_idx][grain_num_1] >= m_num_grains)
+        continue;
+      for(int grain_num_2 = grain_num_1+1; grain_num_2 < m_bin_list[bin_idx].size(); grain_num_2++){
+        check_set[m_bin_list[bin_idx][grain_num_1]].push_back(m_bin_list[bin_idx][grain_num_2]);
+        //m_neighbor_list[m_bin_list[bin_idx][0]].push_back(m_bin_list[bin_idx][grain_num]);
+      }
+    }
+  }
+  for(int ii = 0; ii < m_num_grains; ii++) {
+    m_neighbor_list[ii].clear();
+    if(check_set[ii].size() > 0) {
+      std::sort(check_set[ii].begin(),check_set[ii].end());
+      check_set[ii].erase( std::unique( check_set[ii].begin(),check_set[ii].end() ), check_set[ii].end() );
+      m_neighbor_list[ii] = check_set[ii];
+    }
+  }
+}
+
+void Region::findNeighborsFromBinsUnorderedSet(double delta)
+{
+  std::vector<std::unordered_set<int>> check_set;
+  //check_set.resize(m_num_grains+m_surrounding_collection.num_grains_in_collection);
+  check_set.resize(m_num_grains);
+  // Loop through all bins to see what grains intersect them
+  for(int bin_idx = 0; bin_idx < m_num_bins_x*m_num_bins_y; bin_idx++){
+    // Take the first grain in the bin as the one that collects the contacts
+    // This assumes the grains are in ascending ID order in the bins
+    for(int grain_num_1 = 0; grain_num_1 < m_bin_list[bin_idx].size(); grain_num_1++) {
+      if(m_bin_list[bin_idx][grain_num_1] >= m_num_grains)
+        continue;
+      for(int grain_num_2 = grain_num_1+1; grain_num_2 < m_bin_list[bin_idx].size(); grain_num_2++){
+        check_set[m_bin_list[bin_idx][grain_num_1]].insert(m_bin_list[bin_idx][grain_num_2]);
+        //m_neighbor_list[m_bin_list[bin_idx][0]].push_back(m_bin_list[bin_idx][grain_num]);
+      }
+    }
+  }
+  for(int ii = 0; ii < m_num_grains; ii++) {
+    m_neighbor_list[ii].clear();
+    if(check_set[ii].size() > 0) {
+      m_neighbor_list[ii].assign(check_set[ii].begin(),check_set[ii].end());
+      std::sort(m_neighbor_list[ii].begin(),m_neighbor_list[ii].end());
+    }
+  }
 }
 
 // Because surrounding grains will always have larger indexes (not unique IDs) than the grains in the region,
@@ -650,9 +711,9 @@ void Region::calculateContactForces()
     }
 
     // Check against ceiling
-    if(m_q[grain_num*2+1]+m_r[grain_num] >= 16.00)
+    if(m_q[grain_num*2+1]+m_r[grain_num] >= 18.00)
     {
-      m_f[grain_num*2+1] += (16.00-m_q[grain_num*2+1]-m_r[grain_num])*k;
+      m_f[grain_num*2+1] += (18.00-m_q[grain_num*2+1]-m_r[grain_num])*k;
     }
 
     // Check against left side
@@ -661,9 +722,9 @@ void Region::calculateContactForces()
       m_f[grain_num*2] += (m_r[grain_num]-m_q[grain_num*2])*k;
     }
     // Check against right side
-    if(m_q[grain_num*2]+m_r[grain_num] >= 24.0)
+    if(m_q[grain_num*2]+m_r[grain_num] >= 36.0)
     {
-      m_f[grain_num*2] += (24.0-m_q[grain_num*2]-m_r[grain_num])*k;
+      m_f[grain_num*2] += (36.0-m_q[grain_num*2]-m_r[grain_num])*k;
     }
 
   }

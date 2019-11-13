@@ -66,6 +66,8 @@ public:
   // Put grains into bins
   void rasterizeGrainsToBins(double delta);
   void findNeighborsFromBins(double delta);
+  void findNeighborsFromBinsVect(double delta);
+  void findNeighborsFromBinsUnorderedSet(double delta);
 
   // Find contacts
   void buildContactList();
