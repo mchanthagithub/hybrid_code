@@ -71,7 +71,7 @@ public:
 
   // Find contacts
   void buildContactList();
-  void findContacts();
+  void buildContactListWithContactObjects();
 
   // Calculate and apply contact forces
   void calculateContactForces();
@@ -136,7 +136,7 @@ public:
 
   // Material parameters
   double k = 1000000.0;
-  double eta = 4.0;
+  double eta = 75.55;
   double m_rho = 2600;
 };
 

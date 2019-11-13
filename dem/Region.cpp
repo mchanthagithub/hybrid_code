@@ -18,7 +18,7 @@ Region::Region(std::vector<double> in_min, std::vector<double> in_max, int id, s
   m_region_min = in_min;
   m_region_max = in_max;
   m_num_grains = 0;
-  double r_mean = 0.05;
+  double r_mean = 0.0005;
   m_bin_size = bin_size;
   m_num_bins_x = static_cast<int>((m_region_max[0] - m_region_min[0])/m_bin_size);
   m_num_bins_y = static_cast<int>((m_region_max[1] - m_region_min[1])/m_bin_size);
@@ -34,7 +34,7 @@ Region::Region()
   m_region_min.push_back(0.0); m_region_min.push_back(0.0);
   m_region_max.push_back(2.0); m_region_max.push_back(2.0);
   m_num_grains = 0;
-  double r_mean = 0.05;
+  double r_mean = 0.0005;
   m_bin_size = r_mean*2.0*3.0;
   m_num_bins_x = static_cast<int>((m_region_max[0] - m_region_min[0])/m_bin_size);
   m_num_bins_y = static_cast<int>((m_region_max[1] - m_region_min[1])/m_bin_size);
@@ -44,7 +44,7 @@ Region::Region()
 
 void Region::generateRandomInitialPacking(double r_mean, int num_total_add)
 {
-  double r_min = r_mean*0.999, r_max = r_mean*1.001;
+  double r_min = r_mean*0.85, r_max = r_mean*1.15;
   std::cout<<"r range: "<<r_min<<" "<<r_mean<<" "<<r_max<<std::endl;
   double x_in = r_max + m_region_min[0];
   double y_in = r_max + m_region_min[1];
@@ -594,10 +594,9 @@ void Region::buildContactList()
   //std::cout<<"#actual contacts: "<<actual_contacts<<std::endl;
 }
 
-void Region::findContacts()
+void Region::buildContactListWithContactObjects()
 {
   int count = 0;
-  int count_extra = 0;
   for(int grain_num = 0; grain_num < m_num_grains; grain_num++) {
     count += m_neighbor_list[grain_num].size();
     //std::cout<<"grain: "<<grain_num<<" pos: ";
@@ -607,28 +606,86 @@ void Region::findContacts()
   }
   //std::cout<<"# possible contacts: "<<count<<std::endl;
 
+  m_contacts.clear();
   int actual_contacts = 0;
   for(int grain_num = 0; grain_num < m_num_grains; grain_num++){
-    m_contacts.clear();
+    std::vector<int> contact_list;
+    std::vector<int> contact_list_unique;
     m_contact_list[grain_num].clear();
     m_contact_list_unique[grain_num].clear();
-    int unique_id_1 = m_unique_id[grain_num];
-    for(int check_num = 0; check_num < m_neighbor_list[grain_num].size(); check_num++) {
-      int local_id_2 = m_neighbor_list[grain_num][check_num];
-      int surround_local_id_2 = -1;
-      int unique_id_2;
-      if(local_id_2 > m_num_grains) {
-        surround_local_id_2 -= m_num_grains;
-        unique_id_2 = m_surrounding_collection.unique_id[surround_local_id_2];
-      }
-      else {
-        unique_id_2 = m_unique_id[local_id_2];
+    for(int check_num = 0; check_num < m_neighbor_list[grain_num].size(); check_num++){
+      int check_id = m_neighbor_list[grain_num][check_num];
+      int surround_id = check_id - m_num_grains;
+      int surround_unique_id = -1;
+
+      double dist_squared;
+      double r_squared;
+      if(check_id < m_num_grains) {
+        dist_squared = (m_q[grain_num*2]-m_q[check_id*2])*(m_q[grain_num*2]-m_q[check_id*2])
+                       + (m_q[grain_num*2+1]-m_q[check_id*2+1])*(m_q[grain_num*2+1]-m_q[check_id*2+1]);
+        r_squared = (m_r[grain_num] + m_r[check_id]) * (m_r[grain_num] + m_r[check_id]);
+      } else {
+        dist_squared = (m_q[grain_num*2]-m_surrounding_collection.q[surround_id*2])*(m_q[grain_num*2]-m_surrounding_collection.q[surround_id*2])
+                       + (m_q[grain_num*2+1]-m_surrounding_collection.q[surround_id*2+1])*(m_q[grain_num*2+1]-m_surrounding_collection.q[surround_id*2+1]);
+        r_squared = (m_r[grain_num] + m_surrounding_collection.r[surround_id]) * (m_r[grain_num] + m_surrounding_collection.r[surround_id]);
+        surround_unique_id = m_surrounding_collection.unique_id[surround_id];
       }
 
+      if(dist_squared <= r_squared){
+        contact_list.push_back(check_id);
+        ContactGrainGrain newContact;
+        newContact.grain_idx_1 = m_unique_id[grain_num];
+        newContact.overlap = sqrt(r_squared)-sqrt(dist_squared);
+
+        if(check_id >= m_num_grains) {
+          contact_list_unique.push_back(surround_unique_id);
+          newContact.grain_idx_2 = surround_unique_id;
+        }
+        else {
+          contact_list_unique.push_back(m_unique_id[check_id]);
+          newContact.grain_idx_2 = m_unique_id[check_id];
+        }
+        actual_contacts++;
+
+
+
+        if(verbose) {
+          if(check_id < m_num_grains) {
+            std::cout<<"grain: "<<grain_num<<"/"<<m_num_grains<<" check neighbor: "<<check_id<<" x1 "<<m_q[grain_num*2]<<" x2 "<<m_q[check_id*2];
+            std::cout<<" r1 "<<m_r[grain_num]<<" r2 "<<m_r[check_id]<<std::endl;
+          }
+          else {
+            std::cout<<"grain: "<<grain_num<<"/"<<m_num_grains<<" check neighbor: "<<check_id<<" y1 "<<m_q[grain_num*2+1]<<" y2 "<<m_surrounding_collection.q[surround_id*2+1];
+            std::cout<<" r1 "<<m_r[grain_num]<<" r2 "<<m_surrounding_collection.r[surround_id]<<std::endl;
+          }
+        }
+      }
+    }
+    m_contact_list[grain_num] = contact_list;
+    m_contact_list_unique[grain_num] = contact_list_unique;
+  }
+  if(verbose) {
+    for(int grain_num = 0; grain_num < m_num_grains; grain_num++){
+      if(m_contact_list[grain_num].size() > 0) {
+        std::cout<<"Contact: "<<grain_num<<" with: ";
+        for(int ii = 0; ii < m_contact_list[grain_num].size();ii++)
+        {
+          std::cout<<m_contact_list[grain_num][ii]<<" ";
+        }
+        std::cout<<std::endl;
+      }
     }
   }
 
-  std::cout<<"#actual contacts: "<<actual_contacts<<std::endl;
+  //std::cout<<"#actual contacts: "<<actual_contacts<<std::endl;
+}
+
+double dotProduct(std::vector<double> a, std::vector<double> b) {
+  double result = 0.0;
+  for(int ii = 0; ii < a.size(); ii++) {
+    result += a[ii]*b[ii];
+  }
+  return result;
 }
 
 void Region::calculateContactForces()
@@ -653,11 +710,21 @@ void Region::calculateContactForces()
         n[0] = (m_q[check_id*2] - m_q[grain_num*2])/dist;
         n[1] = (m_q[check_id*2+1] - m_q[grain_num*2+1])/dist;
 
-        m_f[grain_num*2] -= n[0]*overlap*k;
-        m_f[grain_num*2+1] -= n[1]*overlap*k;
+        std::vector<double> v_rel{0.0,0.0};
+        v_rel[0] = m_v[check_id*2] - m_v[grain_num*2];
+        v_rel[1] = m_v[check_id*2+1] - m_v[grain_num*2+1];
+        std::vector<double> v_n{0.0,0.0};
+        std::vector<double> v_t{0.0,0.0};
+        v_t[0] = v_rel[0] - dotProduct(n,v_rel)*n[0];
+        v_t[1] = v_rel[1] - dotProduct(n,v_rel)*n[1];
+        v_n[0] = v_rel[0] - v_t[0];
+        v_n[1] = v_rel[1] - v_t[1];
 
-        m_f[check_id*2] += n[0]*overlap*k;
-        m_f[check_id*2+1] += n[1]*overlap*k;
+        m_f[grain_num*2] -= n[0]*overlap*k - 0.5*eta*v_n[0];
+        m_f[grain_num*2+1] -= n[1]*overlap*k - 0.5*eta*v_n[1];
+
+        m_f[check_id*2] += n[0]*overlap*k - 0.5*eta*v_n[0];
+        m_f[check_id*2+1] += n[1]*overlap*k - 0.5*eta*v_n[1];
 
         double fx = n[0]*overlap*k;
         double fy = n[1]*overlap*k;
@@ -686,9 +753,19 @@ void Region::calculateContactForces()
         n[0] = (m_surrounding_collection.q[surround_id*2] - m_q[grain_num*2])/dist;
         n[1] = (m_surrounding_collection.q[surround_id*2+1] - m_q[grain_num*2+1])/dist;
 
+        std::vector<double> v_rel{0.0,0.0};
+        v_rel[0] = m_surrounding_collection.v[surround_id*2] - m_v[grain_num*2];
+        v_rel[1] = m_surrounding_collection.v[surround_id*2+1] - m_v[grain_num*2+1];
+        std::vector<double> v_n{0.0,0.0};
+        std::vector<double> v_t{0.0,0.0};
+        v_t[0] = v_rel[0] - dotProduct(n,v_rel)*n[0];
+        v_t[1] = v_rel[1] - dotProduct(n,v_rel)*n[1];
+        v_n[0] = v_rel[0] - v_t[0];
+        v_n[1] = v_rel[1] - v_t[1];
+
         // Only apply forces on grain in the region
-        m_f[grain_num*2] -= n[0]*overlap*k;
-        m_f[grain_num*2+1] -= n[1]*overlap*k;
+        m_f[grain_num*2] -= n[0]*overlap*k - 0.5*eta*v_n[0];
+        m_f[grain_num*2+1] -= n[1]*overlap*k - 0.5*eta*v_n[1];
 
         double fx = n[0]*overlap*k;
         double fy = n[1]*overlap*k;
@@ -711,9 +788,9 @@ void Region::calculateContactForces()
     }
 
     // Check against ceiling
-    if(m_q[grain_num*2+1]+m_r[grain_num] >= 18.00)
+    if(m_q[grain_num*2+1]+m_r[grain_num] >= 0.24)
     {
-      m_f[grain_num*2+1] += (18.00-m_q[grain_num*2+1]-m_r[grain_num])*k;
+      m_f[grain_num*2+1] += (0.24-m_q[grain_num*2+1]-m_r[grain_num])*k;
     }
 
     // Check against left side
@@ -722,9 +799,9 @@ void Region::calculateContactForces()
       m_f[grain_num*2] += (m_r[grain_num]-m_q[grain_num*2])*k;
     }
     // Check against right side
-    if(m_q[grain_num*2]+m_r[grain_num] >= 36.0)
+    if(m_q[grain_num*2]+m_r[grain_num] >= 0.40)
     {
-      m_f[grain_num*2] += (36.0-m_q[grain_num*2]-m_r[grain_num])*k;
+      m_f[grain_num*2] += (0.40-m_q[grain_num*2]-m_r[grain_num])*k;
     }
 
   }

@@ -8,7 +8,7 @@
 
 int main(int argc, char *argv[]) {
 
-  double r_mean = 0.05;
+  double r_mean = 0.0005;
   double bin_size = r_mean*2.0*3.0;
 
   if(argc < 2) {
@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
 
   // Generate initial region
   std::vector<double> global_region_min{0.0,0.0};
-  std::vector<double> global_region_max{36.0,18.0};
+  std::vector<double> global_region_max{0.40,0.24};
   int num_total_add = 64000;
   std::vector<bool> is_edge{1,1,1,1};
   Region init_region(global_region_min,global_region_max,0, is_edge,bin_size);
@@ -53,35 +53,9 @@ int main(int argc, char *argv[]) {
     std::cout<<"Region "<<region_list[ii].m_region_id<<" ngrains: "<<region_list[ii].m_num_grains<<std::endl;
   }
 
-  /*
-  std::vector<double> region1_min{0.0,0.0};
-  std::vector<double> region1_max{2.0,10.5};
-  std::vector<double> region2_min{2.0,0.0};
-  std::vector<double> region2_max{4.0,10.5};
-
-  Region region1(region1_min,region1_max,0);
-  Region region2(region2_min,region2_max,1);
-
-  int num_regions_y = 1;
-  int num_regions_x = 2;
-
-  region1.generateRandomInitialPacking(r_mean,num_total_add);
-  region2.generateRandomInitialPacking(r_mean,num_total_add);
-  //region1.addGrainToRegion(1.95,2.0,0.05,1.0,0.0);
-  //region2.addGrainToRegion(2.07,2.0,0.05,0.0,0.0);
-
-
-  writeRegionVTU("region1.vtu",region1.m_region_min,region1.m_region_max);
-  writeRegionVTU("region2.vtu",region2.m_region_min,region2.m_region_max);
-
-  std::vector<Region*> region_list;
-  region_list.push_back(&region1);
-  region_list.push_back(&region2);
-  */
-
   double t = 0.0;
-  double t_f = 1.0;
-  double dt = 0.00001;
+  double t_f = 6.0;
+  double dt = 0.000005;
   int num_regions = region_list.size();
   double delta = r_mean*1.21;
   int step_num = 0;
@@ -115,20 +89,6 @@ int main(int argc, char *argv[]) {
     int right_dir = 1, left_dir = -1;
     double start_comms = omp_get_wtime();
 
-    /*
-    // Hardcode communication for now
-    region_list[0].clearCollectionData(region_list[0].m_surrounding_collection);
-    region_list[1].clearCollectionData(region_list[1].m_surrounding_collection);
-
-     GrainCollection message1;
-    region_list[1].buildCommunicationMessage(message1,left_dir,delta);
-    region_list[0].receiveCommunicationMessage(message1);
-
-    GrainCollection message2;
-    region_list[0].buildCommunicationMessage(message2,right_dir,delta);
-    region_list[1].receiveCommunicationMessage(message2);
-    */
-
     int num_total_across_regions = 0;
     for(int ii = 0; ii < region_list.size(); ii++) {
      region_list[ii].clearCollectionData(region_list[ii].m_surrounding_collection);
@@ -138,7 +98,6 @@ int main(int argc, char *argv[]) {
     if(num_total_across_regions != num_total_init)
       std::cout << "LOST A GRAIN: "<<num_total_across_regions<<" vs "<<num_total_init<<std::endl;
     assert(num_total_across_regions == num_total_init);
-
 
     // Left-Right communication
     for(int x_dr = -1; x_dr < 2; x_dr += 2) {
@@ -178,7 +137,6 @@ int main(int argc, char *argv[]) {
       }
     }
     double end_comms = omp_get_wtime();
-    //std::cout<<"comm: "<<end_comms - start_comms<<std::endl;
 
     double start_map = omp_get_wtime();
     #pragma omp parallel for
@@ -228,56 +186,22 @@ int main(int argc, char *argv[]) {
     std::cout<<","<<end_contact-end_bins<<","<<end_forces-end_contact;
     std::cout<<","<<end_body-end_forces<<","<<end_forward-end_body<<","<<end_forward-start_map<<std::endl;
 
-
-
     /*
-    double start_for = omp_get_wtime();
-    // Simulation in each region
+    double start_sim_loop = omp_get_wtime();
     #pragma omp parallel for
     for(int region = 0; region < num_regions; region++){
-      //auto start_map = std::chrono::high_resolution_clock::now();
       region_list[region].buildGrainIDMap();
       region_list[region].buildGrainCollectionIDMap(region_list[region].m_surrounding_collection);
-      //auto stop_map = std::chrono::high_resolution_clock::now();
-      //auto duration_map = std::chrono::duration_cast<std::chrono::microseconds>(stop_map - start_map);
-      //std::cout<<"map: "<<duration_map.count()<<std::endl;
-
-      //auto start_rasterize = std::chrono::high_resolution_clock::now();
       region_list[region].rasterizeGrainsToBins(delta);
-      //auto stop_rasterize = std::chrono::high_resolution_clock::now();
-      //auto duration_raster = std::chrono::duration_cast<std::chrono::microseconds>(stop_rasterize - start_rasterize);
-      //auto start_neighbor_bin = std::chrono::high_resolution_clock::now();
-      //std::cout<<"grain raster: "<<duration_raster.count()<<std::endl;
-      region_list[region].findNeighborsFromBins(delta);
-      //auto stop_neighbor_bin = std::chrono::high_resolution_clock::now();
-      //auto duration_neighbor_bin = std::chrono::duration_cast<std::chrono::microseconds>(stop_neighbor_bin - start_neighbor_bin);
-      //std::cout<<"bin         : "<<duration_neighbor_bin.count()<<std::endl;
+      region_list[region].findNeighborsFromBinsVect(delta);
       region_list[region].buildContactList();
       region_list[region].calculateContactForces();
       region_list[region].applyBodyForces();
       region_list[region].forwardEuler(dt);
     }
-    double end_for = omp_get_wtime();
-    double num_contacts = 0;
-    double num_in_bins = 0;
-
-    //for(int region = 0; region < num_regions; region++){
-    //  for(int ii = 0; ii < region_list[region].m_num_grains; ii++) {
-    //    num_contacts += region_list[region].m_contact_list[ii].size();
-    //  }
-    //  for(int ii = 0; ii < region_list[region].m_num_bins_y*region_list[region].m_num_bins_x;ii++) {
-    //    num_in_bins += region_list[region].m_bin_list[ii].size();
-    //  }
-    //}
-
-    std::cout<<end_for - start_for<<",1";
-    //std::cout<<","<<num_contacts<<","<<num_in_bins<<","<<end_comms-start_comms<<std::endl;
-    std::cout<<","<<num_contacts<<","<<num_in_bins<<","<<end_comms-start_comms;
-    std::cout<<","<<region_list[0].m_num_grains<<","<<region_list[0].m_surrounding_collection.num_grains_in_collection;
-    std::cout<<","<<region_list[1].m_num_grains<<","<<region_list[1].m_surrounding_collection.num_grains_in_collection;
-    std::cout<<std::endl;
+    double end_sim_loop = omp_get_wtime();
+    std::cout<<end_comms-start_comms<<","<<end_sim_loop-start_sim_loop<<std::endl;
     */
-
 
     bool verbose = false;
 
