@@ -10,13 +10,16 @@
 #include <cmath>
 #include <assert.h>
 #include <map>
+#include <unordered_set>
 
 // Data structure to hold a collection of grains. Can be used as a message between regions
 // or as way to hold all neighbor grain data
 struct GrainCollection {
   std::vector<double> q;
+  std::vector<double> theta;
   std::vector<double> r;
   std::vector<double> v;
+  std::vector<double> omega;
   std::vector<double> f;
   std::vector<int> unique_id;
   std::vector<std::vector<int>> neighbor_list;
@@ -33,6 +36,15 @@ struct ContactGrainGrain {
   std::vector<double> n{0.0,0.0};
   std::vector<double> contact_pt{0.0,0.0};
   double overlap;
+  double s;
+};
+
+struct ContactGrainWall {
+  int grain_idx_1;
+  std::vector<double> n{0.0,0.0};
+  std::vector<double> contact_pt{0.0,0.0};
+  double overlap;
+  double s;
 };
 
 class Region {
@@ -47,10 +59,10 @@ public:
   void generateRandomInitialPacking(double r_mean, int int_total_add);
 
   // Add new grain
-  void addGrainToRegion(double x_in, double y_in, double r_in, double vx_in, double vy_in);
+  void addGrainToRegion(double x_in, double y_in, double theta_in, double r_in, double vx_in, double vy_in, double omega_in);
   // Add existing grain to region
-  void addGrainToRegion(double x_in, double y_in, double r_in, double vx_in, double vy_in, double fx_in, double fy_in,
-                              std::vector<int> neighbor_list_in, std::vector<int> contact_list_in, int unique_id);
+  void addGrainToRegion(double x_in, double y_in, double theta_in, double r_in, double vx_in, double vy_in, double omega_in,
+          double fx_in, double fy_in, std::vector<int> neighbor_list_in, std::vector<int> contact_list_in, int unique_id);
 
   // Add grain from region to collection
   void addGrainToCollection(GrainCollection& collection, int idx);
@@ -75,6 +87,7 @@ public:
 
   // Calculate and apply contact forces
   void calculateContactForces();
+  void calculateContactForcesWithContactObjects();
 
   // Apply body forces
   void applyBodyForces();
@@ -115,8 +128,10 @@ public:
 
   // Grain quantities for this region
   std::vector<double> m_q; // Position (qx1,qy1,qx2,qy2,..,qxn,qyn)
+  std::vector<double> m_theta; // Rotational position (theta1,theta2,...,thetan)
   std::vector<double> m_r; // Radius (r1,r2,..,rn)
   std::vector<double> m_v; // Velocity (qx1,qy1,qx2,qy2,..,qxn,qyn)
+  std::vector<double> m_omega; // Angular Velocity (omega1,omega2,...,omegan)
   std::vector<double> m_f; // Forces (qx1,qy1,qx2,qy2,..,qxn,qyn)
   std::vector<int> m_unique_id; // Unique ID of grain, for grain deletions and additions
   std::vector<std::vector<int>> m_neighbor_list; // List of neighbors for each grain
@@ -132,7 +147,8 @@ public:
   GrainCollection m_surrounding_collection;
 
 
-  std::vector<ContactGrainGrain> m_contacts;
+  std::map<std::pair<int,int>,ContactGrainGrain> m_contacts; // Key are the unique IDs
+  std::map<std::pair<int,int>,ContactGrainGrain> m_contacts_cache; // Key are the unique IDs; from last timestep
 
   // Material parameters
   double k = 1000000.0;

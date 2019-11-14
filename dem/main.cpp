@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
   }
 
   double t = 0.0;
-  double t_f = 6.0;
+  double t_f = 0.01;
   double dt = 0.000005;
   int num_regions = region_list.size();
   double delta = r_mean*1.21;
@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
 
     #pragma omp parallel for
     for(int region = 0; region < num_regions; region++) {
-      region_list[region].buildContactList();
+      region_list[region].buildContactListWithContactObjects();
     }
     double end_contact = omp_get_wtime();
 
