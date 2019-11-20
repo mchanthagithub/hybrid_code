@@ -12,6 +12,90 @@ int Region::m_total_num_grains = 0;
 int Region::m_id_tracker = 0;
 bool verbose = false;
 
+GrainCollection::GrainCollection() {
+  num_grains_in_collection = 0;
+}
+
+// Should only be used for input setting purposes as it does not update unique id
+void GrainCollection::addGrainToCollection(double x_in, double y_in, double theta_in, double r_in, double vx_in,
+                                           double vy_in, double omega_in)
+{
+  q.push_back(x_in); q.push_back(y_in);
+  theta.push_back(theta_in);
+  r.push_back(r_in);
+  v.push_back(vx_in); v.push_back(vy_in);
+  omega.push_back(omega_in);
+  f.push_back(0.0); f.push_back(0.0);
+  std::vector<int> dummy;
+  neighbor_list.push_back(dummy);
+  contact_list.push_back(dummy);
+  contact_list_unique.push_back(dummy);
+  unique_id.push_back(0); // WATCH FOR THI
+  num_grains_in_collection++;
+}
+
+Region::Region(InputSettings& settings) {
+  // Generate regions
+  std::vector<Region> region_list;
+  int num_create_regions = settings.list_of_region_bounds.size();
+  std::vector<double> global_region_min = {DBL_MAX, DBL_MAX};
+  std::vector<double> global_region_max = {DBL_MIN, DBL_MIN};
+
+  // Create all sub-regions
+  for(int ii = 0; ii < num_create_regions; ii++) {
+    Region new_region({settings.list_of_region_bounds[ii][0],settings.list_of_region_bounds[ii][1]},
+                      {settings.list_of_region_bounds[ii][2],settings.list_of_region_bounds[ii][3]},ii,
+                      {0,0,0,0},settings.bin_size);
+    double r_mean = settings.list_radii_dist_params[ii][0];
+    double r_min = r_mean*(1.0 - settings.list_radii_dist_params[ii][1]);
+    double r_max = r_mean*(1.0 + settings.list_radii_dist_params[ii][2]);
+    int num_add = static_cast<int>(settings.list_radii_dist_params[ii][3]);
+    new_region.generateRandomInitialPacking(r_mean,r_min,r_max,num_add);
+    region_list.push_back(new_region);
+
+    if(settings.list_of_region_bounds[ii][0] < global_region_min[0])
+      global_region_min[0] = settings.list_of_region_bounds[ii][0];
+    if(settings.list_of_region_bounds[ii][1] < global_region_min[1])
+      global_region_min[1] = settings.list_of_region_bounds[ii][1];
+
+    if(settings.list_of_region_bounds[ii][2] > global_region_max[0])
+      global_region_max[0] = settings.list_of_region_bounds[ii][2];
+    if(settings.list_of_region_bounds[ii][3] > global_region_max[1])
+      global_region_max[1] = settings.list_of_region_bounds[ii][3];
+  }
+
+  // Initialize this region
+  m_region_min = global_region_min;
+  m_region_max = global_region_max;
+  m_num_grains = 0;
+  m_bin_size = settings.bin_size;
+  m_num_bins_x = static_cast<int>((m_region_max[0] - m_region_min[0])/m_bin_size);
+  m_num_bins_y = static_cast<int>((m_region_max[1] - m_region_min[1])/m_bin_size);
+  m_bin_list.resize(m_num_bins_x*m_num_bins_y);
+  m_region_id = 0;
+  m_is_edge = {true,true,true,true};
+
+
+  for(const Region & reg : region_list) {
+    for(int grain_num = 0; grain_num < reg.m_num_grains; grain_num++) {
+      double x = reg.m_q[grain_num*2]; double y = reg.m_q[grain_num*2+1];
+      double theta = reg.m_theta[grain_num]; double r = reg.m_r[grain_num];
+      double vx = reg.m_v[grain_num*2]; double vy = reg.m_v[grain_num*2+1];
+      double omega = reg.m_omega[grain_num];
+      addGrainToRegion(x,y,theta,r,vx,vy,omega);
+    }
+  }
+
+  for(const std::vector<double> & grain : settings.list_of_individual_grains) {
+    double x = grain[0]; double y = grain[1];
+    double theta = grain[2]; double r = grain[3];
+    double vx = grain[4]; double vy = grain[5];
+    double omega = grain[6];
+    addGrainToRegion(x,y,theta,r,vx,vy,omega);
+  }
+
+}
+
 Region::Region(std::vector<double> in_min, std::vector<double> in_max, int id, std::vector<bool> is_edge, double bin_size)
 {
   m_region_min = in_min;
@@ -25,6 +109,7 @@ Region::Region(std::vector<double> in_min, std::vector<double> in_max, int id, s
   m_region_id = id;
   m_is_edge = is_edge;
   std::cout<<"binsx: "<<m_num_bins_x<<" binsy: "<<m_num_bins_y<<std::endl;
+
   std::cout<<"Region: "<<m_region_id<<" edge: "<<m_is_edge[0]<<" "<<m_is_edge[1]<<" "<<m_is_edge[2]<<" "<<m_is_edge[3]<<std::endl;
 }
 
@@ -41,9 +126,8 @@ Region::Region()
   m_region_id = 0;
 }
 
-void Region::generateRandomInitialPacking(double r_mean, int num_total_add)
+void Region::generateRandomInitialPacking(double r_mean, double r_min, double r_max, int num_total_add)
 {
-  double r_min = r_mean*0.85, r_max = r_mean*1.15;
   std::cout<<"r range: "<<r_min<<" "<<r_mean<<" "<<r_max<<std::endl;
   double x_in = r_max + m_region_min[0];
   double y_in = r_max + m_region_min[1];
@@ -486,33 +570,6 @@ void Region::findNeighborsFromBinsVect(double delta)
   }
 }
 
-void Region::findNeighborsFromBinsUnorderedSet(double delta)
-{
-  std::vector<std::unordered_set<int>> check_set;
-  //check_set.resize(m_num_grains+m_surrounding_collection.num_grains_in_collection);
-  check_set.resize(m_num_grains);
-  // Loop through all bins to see what grains intersect them
-  for(int bin_idx = 0; bin_idx < m_num_bins_x*m_num_bins_y; bin_idx++){
-    // Take the first grain in the bin as the one that collects the contacts
-    // This assumes the grains are in ascending ID order in the bins
-    for(int grain_num_1 = 0; grain_num_1 < m_bin_list[bin_idx].size(); grain_num_1++) {
-      if(m_bin_list[bin_idx][grain_num_1] >= m_num_grains)
-        continue;
-      for(int grain_num_2 = grain_num_1+1; grain_num_2 < m_bin_list[bin_idx].size(); grain_num_2++){
-        check_set[m_bin_list[bin_idx][grain_num_1]].insert(m_bin_list[bin_idx][grain_num_2]);
-        //m_neighbor_list[m_bin_list[bin_idx][0]].push_back(m_bin_list[bin_idx][grain_num]);
-      }
-    }
-  }
-  for(int ii = 0; ii < m_num_grains; ii++) {
-    m_neighbor_list[ii].clear();
-    if(check_set[ii].size() > 0) {
-      m_neighbor_list[ii].assign(check_set[ii].begin(),check_set[ii].end());
-      std::sort(m_neighbor_list[ii].begin(),m_neighbor_list[ii].end());
-    }
-  }
-}
-
 // Because surrounding grains will always have larger indexes (not unique IDs) than the grains in the region,
 // they will always show up in the neighbor lists of the grains in the region, and thus do not need to loop over
 // surrounding grains
@@ -765,14 +822,14 @@ void Region::calculateContactForces()
         v_n[0] = v_rel[0] - v_t[0];
         v_n[1] = v_rel[1] - v_t[1];
 
-        m_f[grain_num*2] -= n[0]*overlap*k - 0.5*eta*v_n[0];
-        m_f[grain_num*2+1] -= n[1]*overlap*k - 0.5*eta*v_n[1];
+        m_f[grain_num*2] -= n[0]*overlap*k_n - 0.5*eta_n*v_n[0];
+        m_f[grain_num*2+1] -= n[1]*overlap*k_n - 0.5*eta_n*v_n[1];
 
-        m_f[check_id*2] += n[0]*overlap*k - 0.5*eta*v_n[0];
-        m_f[check_id*2+1] += n[1]*overlap*k - 0.5*eta*v_n[1];
+        m_f[check_id*2] += n[0]*overlap*k_n - 0.5*eta_n*v_n[0];
+        m_f[check_id*2+1] += n[1]*overlap*k_n - 0.5*eta_n*v_n[1];
 
-        double fx = n[0]*overlap*k;
-        double fy = n[1]*overlap*k;
+        double fx = n[0]*overlap*k_n;
+        double fy = n[1]*overlap*k_n;
         if(verbose) {
           std::cout<<std::fixed;
           std::cout<<std::setprecision(10);
@@ -809,11 +866,11 @@ void Region::calculateContactForces()
         v_n[1] = v_rel[1] - v_t[1];
 
         // Only apply forces on grain in the region
-        m_f[grain_num*2] -= n[0]*overlap*k - 0.5*eta*v_n[0];
-        m_f[grain_num*2+1] -= n[1]*overlap*k - 0.5*eta*v_n[1];
+        m_f[grain_num*2] -= n[0]*overlap*k_n - 0.5*eta_n*v_n[0];
+        m_f[grain_num*2+1] -= n[1]*overlap*k_n - 0.5*eta_n*v_n[1];
 
-        double fx = n[0]*overlap*k;
-        double fy = n[1]*overlap*k;
+        double fx = n[0]*overlap*k_n;
+        double fy = n[1]*overlap*k_n;
 
         if(verbose) {
           std::cout<<std::fixed;
@@ -829,24 +886,24 @@ void Region::calculateContactForces()
     // Check against floor
     if(m_q[grain_num*2+1]-m_r[grain_num] <= 0.0)
     {
-      m_f[grain_num*2+1] += (m_r[grain_num]-m_q[grain_num*2+1])*k;
+      m_f[grain_num*2+1] += (m_r[grain_num]-m_q[grain_num*2+1])*k_n;
     }
 
     // Check against ceiling
     if(m_q[grain_num*2+1]+m_r[grain_num] >= 0.24)
     {
-      m_f[grain_num*2+1] += (0.24-m_q[grain_num*2+1]-m_r[grain_num])*k;
+      m_f[grain_num*2+1] += (0.24-m_q[grain_num*2+1]-m_r[grain_num])*k_n;
     }
 
     // Check against left side
     if(m_q[grain_num*2]-m_r[grain_num] <= 0.0)
     {
-      m_f[grain_num*2] += (m_r[grain_num]-m_q[grain_num*2])*k;
+      m_f[grain_num*2] += (m_r[grain_num]-m_q[grain_num*2])*k_n;
     }
     // Check against right side
     if(m_q[grain_num*2]+m_r[grain_num] >= 0.40)
     {
-      m_f[grain_num*2] += (0.40-m_q[grain_num*2]-m_r[grain_num])*k;
+      m_f[grain_num*2] += (0.40-m_q[grain_num*2]-m_r[grain_num])*k_n;
     }
   }
 }
@@ -885,14 +942,14 @@ void Region::calculateContactForcesWithContactObjects()
         v_n[0] = v_rel[0] - v_t[0];
         v_n[1] = v_rel[1] - v_t[1];
 
-        m_f[grain_num*2] -= n[0]*overlap*k - 0.5*eta*v_n[0];
-        m_f[grain_num*2+1] -= n[1]*overlap*k - 0.5*eta*v_n[1];
+        m_f[grain_num*2] -= n[0]*overlap*k_n - 0.5*eta_n*v_n[0];
+        m_f[grain_num*2+1] -= n[1]*overlap*k_n - 0.5*eta_n*v_n[1];
 
-        m_f[check_id*2] += n[0]*overlap*k - 0.5*eta*v_n[0];
-        m_f[check_id*2+1] += n[1]*overlap*k - 0.5*eta*v_n[1];
+        m_f[check_id*2] += n[0]*overlap*k_n - 0.5*eta_n*v_n[0];
+        m_f[check_id*2+1] += n[1]*overlap*k_n - 0.5*eta_n*v_n[1];
 
-        double fx = n[0]*overlap*k;
-        double fy = n[1]*overlap*k;
+        double fx = n[0]*overlap*k_n;
+        double fy = n[1]*overlap*k_n;
         if(verbose) {
           std::cout<<std::fixed;
           std::cout<<std::setprecision(10);
@@ -929,11 +986,11 @@ void Region::calculateContactForcesWithContactObjects()
         v_n[1] = v_rel[1] - v_t[1];
 
         // Only apply forces on grain in the region
-        m_f[grain_num*2] -= n[0]*overlap*k - 0.5*eta*v_n[0];
-        m_f[grain_num*2+1] -= n[1]*overlap*k - 0.5*eta*v_n[1];
+        m_f[grain_num*2] -= n[0]*overlap*k_n - 0.5*eta_n*v_n[0];
+        m_f[grain_num*2+1] -= n[1]*overlap*k_n - 0.5*eta_n*v_n[1];
 
-        double fx = n[0]*overlap*k;
-        double fy = n[1]*overlap*k;
+        double fx = n[0]*overlap*k_n;
+        double fy = n[1]*overlap*k_n;
 
         if(verbose) {
           std::cout<<std::fixed;
@@ -949,24 +1006,24 @@ void Region::calculateContactForcesWithContactObjects()
     // Check against floor
     if(m_q[grain_num*2+1]-m_r[grain_num] <= 0.0)
     {
-      m_f[grain_num*2+1] += (m_r[grain_num]-m_q[grain_num*2+1])*k;
+      m_f[grain_num*2+1] += (m_r[grain_num]-m_q[grain_num*2+1])*k_n;
     }
 
     // Check against ceiling
-    if(m_q[grain_num*2+1]+m_r[grain_num] >= 0.24)
+    if(m_q[grain_num*2+1]+m_r[grain_num] >= 0.1)
     {
-      m_f[grain_num*2+1] += (0.24-m_q[grain_num*2+1]-m_r[grain_num])*k;
+      m_f[grain_num*2+1] += (0.1-m_q[grain_num*2+1]-m_r[grain_num])*k_n;
     }
 
     // Check against left side
     if(m_q[grain_num*2]-m_r[grain_num] <= 0.0)
     {
-      m_f[grain_num*2] += (m_r[grain_num]-m_q[grain_num*2])*k;
+      m_f[grain_num*2] += (m_r[grain_num]-m_q[grain_num*2])*k_n;
     }
     // Check against right side
-    if(m_q[grain_num*2]+m_r[grain_num] >= 0.40)
+    if(m_q[grain_num*2]+m_r[grain_num] >= 0.05)
     {
-      m_f[grain_num*2] += (0.40-m_q[grain_num*2]-m_r[grain_num])*k;
+      m_f[grain_num*2] += (0.05-m_q[grain_num*2]-m_r[grain_num])*k_n;
     }
 
   }

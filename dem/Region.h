@@ -11,10 +11,15 @@
 #include <assert.h>
 #include <map>
 #include <unordered_set>
+#include "InputSettings.h"
+
 
 // Data structure to hold a collection of grains. Can be used as a message between regions
 // or as way to hold all neighbor grain data
 struct GrainCollection {
+  GrainCollection();
+  void addGrainToCollection(double x_in, double y_in, double theta_in, double r_in, double vx_in, double vy_in, double omega_in);
+
   std::vector<double> q;
   std::vector<double> theta;
   std::vector<double> r;
@@ -49,14 +54,17 @@ struct ContactGrainWall {
 
 class Region {
 public:
-  // Constructor to set up region bounds
-  Region(std::vector<double> in_min, std::vector<double> in_max, int id, std::vector<bool> is_edge, double bin_size);
   // Default Constructor
   Region();
+  // Constructor to set up region bounds
+  Region(std::vector<double> in_min, std::vector<double> in_max, int id, std::vector<bool> is_edge, double bin_size);
+  // Constructor using input settings from input file
+  Region(InputSettings& settings);
+
 
   // Simulation Functions ============================================================================
   // Generates Packing
-  void generateRandomInitialPacking(double r_mean, int int_total_add);
+  void generateRandomInitialPacking(double r_mean, double r_min, double r_max, int int_total_add);
 
   // Add new grain
   void addGrainToRegion(double x_in, double y_in, double theta_in, double r_in, double vx_in, double vy_in, double omega_in);
@@ -79,7 +87,6 @@ public:
   void rasterizeGrainsToBins(double delta);
   void findNeighborsFromBins(double delta);
   void findNeighborsFromBinsVect(double delta);
-  void findNeighborsFromBinsUnorderedSet(double delta);
 
   // Find contacts
   void buildContactList();
@@ -151,8 +158,11 @@ public:
   std::map<std::pair<int,int>,ContactGrainGrain> m_contacts_cache; // Key are the unique IDs; from last timestep
 
   // Material parameters
-  double k = 1000000.0;
-  double eta = 75.55;
+  double k_n = 1000000.0;
+  double k_t = 1000000.0;
+  double eta_n = 75.55;
+  double eta_t = 75.55;
+  double m_mu = 0.5;
   double m_rho = 2600;
 };
 

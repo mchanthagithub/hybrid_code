@@ -3,4 +3,4 @@ project(dem)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -fopenmp -O3")
 include_directories(fileIO)
-add_executable(dem main.cpp fileIO/outputWriter.cpp fileIO/outputWriter.h Region.cpp Region.h)
+add_executable(dem main.cpp fileIO/outputWriter.cpp fileIO/outputWriter.h Region.cpp Region.h fileIO/inputParser.cpp fileIO/inputParser.h InputSettings.cpp InputSettings.h)

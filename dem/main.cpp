@@ -1,6 +1,8 @@
 #include <iostream>
 #include <vector>
 #include "outputWriter.h"
+#include "inputParser.h"
+#include "InputSettings.h"
 #include "Region.h"
 #include <random>
 #include "chrono"
@@ -8,8 +10,17 @@
 
 int main(int argc, char *argv[]) {
 
+  InputSettings settings = readInputFile("test_input.txt");
+
   double r_mean = 0.0005;
   double bin_size = r_mean*2.0*3.0;
+
+  double t = 0.0;
+  double t_f = settings.t_f;
+  double dt = settings.dt;
+
+  std::cout<<"TF: "<<t_f<<std::endl;
+  std::cout<<"DT: "<<t_f<<std::endl;
 
   if(argc < 2) {
     std::cout<<"Using 3 grain d as bin size"<<std::endl;
@@ -24,11 +35,11 @@ int main(int argc, char *argv[]) {
 
   // Generate initial region
   std::vector<double> global_region_min{0.0,0.0};
-  std::vector<double> global_region_max{0.40,0.24};
-  int num_total_add = 64000;
+  std::vector<double> global_region_max{0.05,0.1};
+  int num_total_add = 2000;
   std::vector<bool> is_edge{1,1,1,1};
   Region init_region(global_region_min,global_region_max,0, is_edge,bin_size);
-  init_region.generateRandomInitialPacking(r_mean,num_total_add);
+  init_region.generateRandomInitialPacking(r_mean,0.85*r_mean,1.15*r_mean,num_total_add);
   int num_total_init = init_region.m_num_grains;
 
   // Get number of threads for domain decomposition
@@ -45,6 +56,7 @@ int main(int argc, char *argv[]) {
   std::vector<Region> region_list;
   std::vector<int> domain_division;
   init_region.domainDecomposition(num_threads,region_list, domain_division);
+  int num_regions = region_list.size();
 
   writeGrainsVTU("init_grains.vtu",init_region.m_q,init_region.m_v,
                    init_region.m_r,init_region.m_unique_id,init_region.m_f);
@@ -53,13 +65,10 @@ int main(int argc, char *argv[]) {
     std::cout<<"Region "<<region_list[ii].m_region_id<<" ngrains: "<<region_list[ii].m_num_grains<<std::endl;
   }
 
-  double t = 0.0;
-  double t_f = 0.01;
-  double dt = 0.000005;
-  int num_regions = region_list.size();
+
   double delta = r_mean*1.21;
   int step_num = 0;
-  int freq = 200;
+  int freq = settings.freq;
   //freq = static_cast<int>(1.0/dt);
   int skip = static_cast<int>(1.0/dt)/freq;
 
@@ -82,7 +91,7 @@ int main(int argc, char *argv[]) {
   }
 
   output_num++;
-  while(t < t_f){
+  while(t < settings.t_f){
     //std::cout<<"t: "<<t<<std::endl;
     step_num++;
 
