@@ -74,7 +74,7 @@ Region::Region(InputSettings& settings) {
   m_bin_list.resize(m_num_bins_x*m_num_bins_y);
   m_region_id = 0;
   m_is_edge = {true,true,true,true};
-
+  m_walls = settings.list_of_walls;
 
   for(const Region & reg : region_list) {
     for(int grain_num = 0; grain_num < reg.m_num_grains; grain_num++) {
@@ -586,7 +586,7 @@ void Region::buildContactList()
   }
   //std::cout<<"# possible contacts: "<<count<<std::endl;
 
-  m_contacts.clear();
+  m_contacts_grain_grain.clear();
   int actual_contacts = 0;
   for(int grain_num = 0; grain_num < m_num_grains; grain_num++){
     std::vector<int> contact_list;
@@ -660,6 +660,14 @@ void Region::buildContactList()
   //std::cout<<"#actual contacts: "<<actual_contacts<<std::endl;
 }
 
+double dotProduct(std::vector<double> a, std::vector<double> b) {
+  double result = 0.0;
+  for(int ii = 0; ii < a.size(); ii++) {
+    result += a[ii]*b[ii];
+  }
+  return result;
+}
+
 void Region::buildContactListWithContactObjects()
 {
   int count = 0;
@@ -672,21 +680,30 @@ void Region::buildContactListWithContactObjects()
   }
   //std::cout<<"# possible contacts: "<<count<<std::endl;
 
-  m_contacts.clear();
+  m_contacts_grain_grain.clear();
+  m_contacts_grain_wall.clear();
   int actual_contacts = 0;
+  int num_wall_contacts = 0;
   for(int grain_num = 0; grain_num < m_num_grains; grain_num++){
     std::vector<int> contact_list;
     std::vector<int> contact_list_unique;
     m_contact_list[grain_num].clear();
     m_contact_list_unique[grain_num].clear();
-    int unique_id_1 = m_unique_id[grain_num];
-    double x_coord_1 = m_q[grain_num*2];
-    double y_coord_1 = m_q[grain_num*2+1];
-    double r_1 = m_r[grain_num];
+
+    // Grain-grain contacts
     for(int check_num = 0; check_num < m_neighbor_list[grain_num].size(); check_num++){
+      int unique_id_1 = m_unique_id[grain_num];
+      double x_coord_1 = m_q[grain_num*2];
+      double y_coord_1 = m_q[grain_num*2+1];
+      double r_1 = m_r[grain_num];
+      std::vector<double> v_1 = {m_v[grain_num*2], m_v[grain_num*2+1]};
+      bool is_neighbor_1 = false;
+
       int check_id = m_neighbor_list[grain_num][check_num];
       int surround_id = check_id - m_num_grains;
       int surround_unique_id = -1;
+      bool is_neighbor_2;
+      std::vector<double> v_2 = {m_v[grain_num*2], m_v[grain_num*2+1]};
 
       double x_coord_2, y_coord_2, r_2;
       int unique_id_2;
@@ -697,12 +714,16 @@ void Region::buildContactListWithContactObjects()
         x_coord_2 = m_q[check_id*2];
         y_coord_2 = m_q[check_id*2+1];
         r_2 = m_r[check_id];
+        is_neighbor_2 = false;
+        v_2.push_back(m_v[grain_num*2]); v_2.push_back(m_v[grain_num*2+1]);
       } else {
         unique_id_2 = m_surrounding_collection.unique_id[surround_id];
         x_coord_2 = m_surrounding_collection.q[surround_id*2];
         y_coord_2 = m_surrounding_collection.q[surround_id*2+1];
         r_2 = m_surrounding_collection.r[surround_id];
         surround_unique_id = m_surrounding_collection.unique_id[surround_id];
+        is_neighbor_2 = true;
+        v_2.push_back(m_surrounding_collection.v[surround_id*2]);v_2.push_back(m_surrounding_collection.v[grain_num*2+1]);
       }
 
       dist_squared = (x_coord_1 - x_coord_2)*(x_coord_1 - x_coord_2) + (y_coord_1 - y_coord_2)*(y_coord_1 - y_coord_2);
@@ -719,32 +740,40 @@ void Region::buildContactListWithContactObjects()
           std::swap(y_coord_1,y_coord_2);
           std::swap(r_1,r_2);
           std::swap(unique_id_1,unique_id_2);
+          std::swap(is_neighbor_1,is_neighbor_2);
+          std::swap(v_1,v_2);
         }
 
         ContactGrainGrain newContact;
         newContact.grain_idx_1 = unique_id_1;
         newContact.grain_idx_2 = unique_id_2;
+        newContact.is_neighbor_1 = is_neighbor_1;
+        newContact.is_neighbor_2 = is_neighbor_2;
         newContact.overlap = sqrt(r_squared)-dist;
         contact_list_unique.push_back(surround_unique_id);
 
         std::vector<double> n{0.0,0.0};
         std::vector<double> contact_pt{0.0,0.0};
+        std::vector<double> v_rel{0.0,0.0};
         n[0] = (x_coord_2 - x_coord_1)/dist;
         n[1] = (y_coord_2 - y_coord_1)/dist;
         contact_pt[0] = x_coord_1 + n[0]*dist*0.5;
         contact_pt[1] = y_coord_1 + n[1]*dist*0.5;
+        v_rel[0] = v_2[0] - v_1[0];
+        v_rel[1] = v_2[1] - v_1[0];
         newContact.n = n;
         newContact.contact_pt = contact_pt;
+        newContact.v_rel = v_rel;
 
         std::pair<int,int> id_pair = std::make_pair(unique_id_1,unique_id_2);
         // Check to see if this contact existed at the last timestep
-        if(m_contacts_cache.count(id_pair) == 1) {
+        if(m_contacts_grain_grain_cache.count(id_pair) == 1) {
           // Found an old contact, take its integrated history
-          newContact.s = m_contacts_cache.at(id_pair).s;
+          newContact.s = m_contacts_grain_grain_cache.at(id_pair).s;
         } else {
           newContact.s = 0.0;
         }
-        m_contacts.insert(std::make_pair(id_pair,newContact));
+        m_contacts_grain_grain.insert(std::make_pair(id_pair,newContact));
 
         contact_list.push_back(check_id);
         actual_contacts++;
@@ -761,11 +790,57 @@ void Region::buildContactListWithContactObjects()
         }
       }
     }
+
+    // Grain-Wall contacts
+    int wall_num = 0;
+    for(auto const& wall: m_walls) {
+      int unique_id_1 = m_unique_id[grain_num];
+      double x_coord_1 = m_q[grain_num*2];
+      double y_coord_1 = m_q[grain_num*2+1];
+      double r_1 = m_r[grain_num];
+      std::vector<double> v_1 = {m_v[grain_num*2], m_v[grain_num*2+1]};
+
+      if(verbose) {
+
+      }
+
+        std::vector<double> grain_to_plane_vec = {x_coord_1-wall[0],y_coord_1-wall[1]};
+      std::vector<double> wall_n = {wall[2],wall[3]};
+      double dist = dotProduct(grain_to_plane_vec,wall_n);
+
+      // Found contact
+      if(dist < m_r[grain_num]) {
+        num_wall_contacts++;
+        double overlap = m_r[grain_num] - dist;
+        ContactGrainWall new_grain_wall_contact;
+        new_grain_wall_contact.grain_idx = unique_id_1;
+        new_grain_wall_contact.wall_idx = wall_num;
+        new_grain_wall_contact.n = wall_n;
+        new_grain_wall_contact.v_rel = v_1; /// Maybe wrong?
+
+        new_grain_wall_contact.overlap = overlap;
+        double contact_pt_x = x_coord_1-wall_n[0]*(r_1-overlap*0.5);
+        double contact_pt_y = y_coord_1-wall_n[0]*(r_1-overlap*0.5);
+        new_grain_wall_contact.contact_pt = {contact_pt_x,contact_pt_y};
+        std::pair<int,int> id_pair = std::make_pair(unique_id_1,wall_num);
+
+        // Check to see if this contact existed at the last timestep
+        if(m_contacts_grain_wall_cache.count(id_pair) == 1) {
+          // Found an old contact, take its integrated history
+          new_grain_wall_contact.s = m_contacts_grain_wall_cache.at(id_pair).s;
+        } else {
+          new_grain_wall_contact.s = 0.0;
+        }
+        m_contacts_grain_wall.insert(std::make_pair(id_pair,new_grain_wall_contact));
+      }
+      wall_num++;
+    }
+
     m_contact_list[grain_num] = contact_list;
     m_contact_list_unique[grain_num] = contact_list_unique;
   }
-  m_contacts_cache = m_contacts;
-
+  m_contacts_grain_grain_cache = m_contacts_grain_grain;
+  m_contacts_grain_wall_cache = m_contacts_grain_wall;
   if(verbose) {
     for(int grain_num = 0; grain_num < m_num_grains; grain_num++){
       if(m_contact_list[grain_num].size() > 0) {
@@ -779,16 +854,11 @@ void Region::buildContactListWithContactObjects()
     }
   }
 
-  //std::cout<<"#actual contacts: "<<actual_contacts<<std::endl;
+  std::cout<<"#grain-grain contacts: "<<actual_contacts<<std::endl;
+  std::cout<<"#grain-wall contacts: "<<num_wall_contacts<<std::endl;
 }
 
-double dotProduct(std::vector<double> a, std::vector<double> b) {
-  double result = 0.0;
-  for(int ii = 0; ii < a.size(); ii++) {
-    result += a[ii]*b[ii];
-  }
-  return result;
-}
+
 
 void Region::calculateContactForces()
 {
@@ -912,120 +982,61 @@ void Region::calculateContactForcesWithContactObjects()
 {
   // Zero out force
   std::fill(m_f.begin(), m_f.end(), 0.0);
+  // Grain-Grain contacts
+  for(auto & contact_map_member : m_contacts_grain_grain )
+  {
+    const ContactGrainGrain contact = contact_map_member.second;
+    bool force_written = false;
 
-  
-  
-  for(int grain_num = 0; grain_num < m_num_grains; grain_num++){
-    for(int contact_num = 0; contact_num < m_contact_list[grain_num].size(); contact_num++){
-      int check_id = m_contact_list[grain_num][contact_num];
+    int unique_id_1 = contact.grain_idx_1;
+    int unique_id_2 = contact.grain_idx_2;
+    std::vector<double> v_n{0.0,0.0};
+    std::vector<double> v_t{0.0,0.0};
+    v_t[0] = contact.v_rel[0] - dotProduct(contact.n,contact.v_rel)*contact.n[0];
+    v_t[1] = contact.v_rel[1] - dotProduct(contact.n,contact.v_rel)*contact.n[1];
+    v_n[0] = contact.v_rel[0] - v_t[0];
+    v_n[1] = contact.v_rel[1] - v_t[1];
 
-      if(check_id < m_num_grains) {
-        double dist_squared = (m_q[grain_num*2]-m_q[check_id*2])*(m_q[grain_num*2]-m_q[check_id*2])
-                              + (m_q[grain_num*2+1]-m_q[check_id*2+1])*(m_q[grain_num*2+1]-m_q[check_id*2+1]);
-        double r_squared = (m_r[grain_num] + m_r[check_id]) * (m_r[grain_num] + m_r[check_id]);
+    double fx = contact.n[0]*contact.overlap*k_n - 0.5*eta_n*v_n[0];
+    double fy = contact.n[1]*contact.overlap*k_n - 0.5*eta_n*v_n[1];
 
-        double dist = sqrt(dist_squared);
-        double r_tot = m_r[grain_num]+m_r[check_id];
-
-        double overlap = r_tot-dist;
-        std::vector<double> n{0.0,0.0};
-        n[0] = (m_q[check_id*2] - m_q[grain_num*2])/dist;
-        n[1] = (m_q[check_id*2+1] - m_q[grain_num*2+1])/dist;
-
-        std::vector<double> v_rel{0.0,0.0};
-        v_rel[0] = m_v[check_id*2] - m_v[grain_num*2];
-        v_rel[1] = m_v[check_id*2+1] - m_v[grain_num*2+1];
-        std::vector<double> v_n{0.0,0.0};
-        std::vector<double> v_t{0.0,0.0};
-        v_t[0] = v_rel[0] - dotProduct(n,v_rel)*n[0];
-        v_t[1] = v_rel[1] - dotProduct(n,v_rel)*n[1];
-        v_n[0] = v_rel[0] - v_t[0];
-        v_n[1] = v_rel[1] - v_t[1];
-
-        m_f[grain_num*2] -= n[0]*overlap*k_n - 0.5*eta_n*v_n[0];
-        m_f[grain_num*2+1] -= n[1]*overlap*k_n - 0.5*eta_n*v_n[1];
-
-        m_f[check_id*2] += n[0]*overlap*k_n - 0.5*eta_n*v_n[0];
-        m_f[check_id*2+1] += n[1]*overlap*k_n - 0.5*eta_n*v_n[1];
-
-        double fx = n[0]*overlap*k_n;
-        double fy = n[1]*overlap*k_n;
-        if(verbose) {
-          std::cout<<std::fixed;
-          std::cout<<std::setprecision(10);
-          std::cout<<"F btwn "<<m_unique_id[grain_num]<<","<<m_unique_id[check_id]<<" overlap "<<overlap<<" n0 "<<n[0]<<" n1 "<<n[1]<<" fx "<<fx<<" fy "<<fy<<std::endl;
-
-          //std::cout<<"F btwn "<<m_unique_id[grain_num]<<","<<m_unique_id[check_id]<<" overlap "<<overlap<<" n0 "<<n[0]<<" n1 "<<n[1]<<" f1x "<<m_f[grain_num*2]<<" f1y "<<m_f[grain_num*2+1]<<std::endl;
-          //std::cout<<" f2x "<<m_f[check_id*2]<<" f2y "<<m_f[check_id*2+1]<<std::endl;
-        }
-
-
-      } else {
-        int surround_id = check_id - m_num_grains;
-        double dist_squared = (m_q[grain_num*2]-m_surrounding_collection.q[surround_id*2])*(m_q[grain_num*2]-m_surrounding_collection.q[surround_id*2])
-                              + (m_q[grain_num*2+1]-m_surrounding_collection.q[surround_id*2+1])*(m_q[grain_num*2+1]-m_surrounding_collection.q[surround_id*2+1]);
-        double r_squared = (m_r[grain_num] + m_surrounding_collection.r[surround_id]) * (m_r[grain_num] + m_surrounding_collection.r[surround_id]);
-
-        double r_tot = m_r[grain_num]+m_surrounding_collection.r[surround_id];
-        double dist = sqrt(dist_squared);
-        double overlap = r_tot-dist;
-
-        //double overlap = sqrt(r_squared - dist_squared);
-        std::vector<double> n{0.0,0.0};
-        n[0] = (m_surrounding_collection.q[surround_id*2] - m_q[grain_num*2])/dist;
-        n[1] = (m_surrounding_collection.q[surround_id*2+1] - m_q[grain_num*2+1])/dist;
-
-        std::vector<double> v_rel{0.0,0.0};
-        v_rel[0] = m_surrounding_collection.v[surround_id*2] - m_v[grain_num*2];
-        v_rel[1] = m_surrounding_collection.v[surround_id*2+1] - m_v[grain_num*2+1];
-        std::vector<double> v_n{0.0,0.0};
-        std::vector<double> v_t{0.0,0.0};
-        v_t[0] = v_rel[0] - dotProduct(n,v_rel)*n[0];
-        v_t[1] = v_rel[1] - dotProduct(n,v_rel)*n[1];
-        v_n[0] = v_rel[0] - v_t[0];
-        v_n[1] = v_rel[1] - v_t[1];
-
-        // Only apply forces on grain in the region
-        m_f[grain_num*2] -= n[0]*overlap*k_n - 0.5*eta_n*v_n[0];
-        m_f[grain_num*2+1] -= n[1]*overlap*k_n - 0.5*eta_n*v_n[1];
-
-        double fx = n[0]*overlap*k_n;
-        double fy = n[1]*overlap*k_n;
-
-        if(verbose) {
-          std::cout<<std::fixed;
-          std::cout<<std::setprecision(10);
-          std::cout<<"F surround btwn "<<m_unique_id[grain_num]<<","<<m_surrounding_collection.unique_id[surround_id]<<" overlap "<<overlap<<" n0 "<<n[0]<<" n1 "<<n[1]<<" fx "<<fx<<" fy "<<fy<<std::endl;
-
-          //std::cout<<"F surround btwn "<<m_unique_id[grain_num]<<","<<m_surrounding_collection.unique_id[surround_id]<<" overlap "<<overlap<<" n0 "<<n[0]<<" n1 "<<n[1]<<std::endl;
-          //std::cout<<" fx "<<m_f[grain_num*2]<<" fy "<<m_f[grain_num*2+1]<<std::endl;
-        }
+    if(!contact.is_neighbor_1) {
+      int local_id_1 = m_unique_to_local_map[unique_id_1];
+      m_f[local_id_1*2] -= fx;
+      m_f[local_id_1*2+1] -= fy;
+      contact_map_member.second.force = {-fx,-fy};
+    }
+    if(!contact.is_neighbor_2) {
+      int local_id_2 = m_unique_to_local_map[unique_id_2];
+      m_f[local_id_2*2] += fx;
+      m_f[local_id_2*2+1] += fy;
+      if(!force_written) {
+        contact_map_member.second.force = {fx,fy};
       }
+    }
+  }
 
-    }
-    // Check against floor
-    if(m_q[grain_num*2+1]-m_r[grain_num] <= 0.0)
-    {
-      m_f[grain_num*2+1] += (m_r[grain_num]-m_q[grain_num*2+1])*k_n;
-    }
+  // Grain-Wall contacts
+  for(auto & contact_map_member : m_contacts_grain_wall )
+  {
+    const ContactGrainWall contact = contact_map_member.second;
 
-    // Check against ceiling
-    if(m_q[grain_num*2+1]+m_r[grain_num] >= 0.1)
-    {
-      m_f[grain_num*2+1] += (0.1-m_q[grain_num*2+1]-m_r[grain_num])*k_n;
-    }
+    int unique_id_1 = contact.grain_idx;
+    int wall_id = contact.wall_idx;
+    std::vector<double> v_n{0.0,0.0};
+    std::vector<double> v_t{0.0,0.0};
+    v_t[0] = contact.v_rel[0] - dotProduct(contact.n,contact.v_rel)*contact.n[0];
+    v_t[1] = contact.v_rel[1] - dotProduct(contact.n,contact.v_rel)*contact.n[1];
+    v_n[0] = contact.v_rel[0] - v_t[0];
+    v_n[1] = contact.v_rel[1] - v_t[1];
 
-    // Check against left side
-    if(m_q[grain_num*2]-m_r[grain_num] <= 0.0)
-    {
-      m_f[grain_num*2] += (m_r[grain_num]-m_q[grain_num*2])*k_n;
-    }
-    // Check against right side
-    if(m_q[grain_num*2]+m_r[grain_num] >= 0.05)
-    {
-      m_f[grain_num*2] += (0.05-m_q[grain_num*2]-m_r[grain_num])*k_n;
-    }
+    double fx = contact.n[0]*contact.overlap*k_n - 0.5*eta_n*v_n[0];
+    double fy = contact.n[1]*contact.overlap*k_n - 0.5*eta_n*v_n[1];
 
+    int local_id_1 = m_unique_to_local_map[unique_id_1];
+    m_f[local_id_1*2] += fx;
+    m_f[local_id_1*2+1] += fy;
+    contact_map_member.second.force = {fx,fy};
   }
 
 }

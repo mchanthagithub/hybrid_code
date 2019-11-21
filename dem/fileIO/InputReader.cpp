@@ -3,7 +3,7 @@
 //
 
 #include <vector>
-#include "inputParser.h"
+#include "InputReader.h"
 
 template<typename T> T getValueFromEqualityString(const char* value_char, std::string line) {
   std::string value = value_char;
@@ -12,10 +12,10 @@ template<typename T> T getValueFromEqualityString(const char* value_char, std::s
     // Find everything after the equal sign
     std::string token = line.substr(line.find(delim)+1,std::string::npos);
     if(std::is_same<T,int>::value) {
-      std::cout<<value_char<<":"<<token<<std::endl;
+      //std::cout<<value_char<<":"<<token<<std::endl;
       return std::stoi(token);
     } else if(std::is_same<T,double>::value) {
-      std::cout<<value_char<<" "<<token<<std::endl;
+      //std::cout<<value_char<<" "<<token<<std::endl;
       return std::stod(token);
     }
   } else {
@@ -27,11 +27,11 @@ template<typename T> std::vector<T> getValuesFromList(std::string line) {
   std::string delim = ",";
   std::vector<T> data;
   size_t pos = 0;
-  std::cout<<"New data: ";
+  //std::cout<<"New data: ";
   int ctr = 0;
   while( (pos = line.find(delim)) != std::string::npos) {
     std::string token = line.substr(0, pos);
-    std::cout << token << " ";
+    //std::cout << token << " ";
     if (std::is_same<T, int>::value) {
       data.push_back(std::stoi(token));
     } else if (std::is_same<T, double>::value) {
@@ -42,14 +42,14 @@ template<typename T> std::vector<T> getValuesFromList(std::string line) {
   }
   // Get last value
   std::string token = line.substr(0, pos);
-  std::cout << token << " ";
+  //std::cout << token << " ";
   if (std::is_same<T, int>::value) {
     data.push_back(std::stoi(token));
   } else if (std::is_same<T, double>::value) {
     data.push_back(std::stod(token));
   }
 
-  std::cout<<std::endl;
+  //std::cout<<std::endl;
 
   if(ctr == 0) {
     std::cout<<"Did not read in any list data. Line read is: "<<line<<std::endl;
@@ -127,7 +127,28 @@ InputSettings readInputFile(std::string file_name) {
           }
           read_in_settings.list_of_individual_grains.push_back(grain_properties);
         }
-      } else if (line.find("k_n=") != std::string::npos) {
+      } else if(line.find("walls=") != std::string::npos) {
+        int num_walls = getValueFromEqualityString<int>("walls",line);
+        std::vector<std::vector<double> > wall_list;
+        for(int ii = 0; ii < num_walls; ii++) {
+          getline(input_file,line);
+          // Skip any comments
+          while(line.find("#") != std::string::npos) {
+            getline(input_file,line);
+          }
+          if(line.find("=") != std::string::npos) {
+            std::cout<<"Found another property while going through wall list: "<<line<<std::endl;
+            exit(0);
+          }
+          wall_list.push_back(getValuesFromList<double>(line));
+        }
+
+        if(wall_list.size() != num_walls ) {
+          std::cout<<"Number of walls does not match input number: "<<wall_list.size()<<" vs "<<num_walls<<std::endl;
+          exit(0);
+        }
+        read_in_settings.list_of_walls = wall_list;
+      }else if (line.find("k_n=") != std::string::npos) {
         read_in_settings.k_n = getValueFromEqualityString<double>("k_n",line);
       }else if (line.find("k_t=") != std::string::npos) {
         read_in_settings.k_t = getValueFromEqualityString<double>("k_t",line);
@@ -147,6 +168,8 @@ InputSettings readInputFile(std::string file_name) {
         read_in_settings.bin_size = getValueFromEqualityString<double>("bin_size",line);
       }else if (line.find("out_freq=") != std::string::npos) {
         read_in_settings.freq = getValueFromEqualityString<int>("out_freq",line);
+      }else if (line.find("out_forces=") != std::string::npos) {
+        read_in_settings.out_forces = static_cast<bool>(getValueFromEqualityString<int>("out_forces",line));
       }
     }
 
@@ -157,7 +180,7 @@ InputSettings readInputFile(std::string file_name) {
   input_file.close();
 
   std::cout<<"Settings read in as: "<<std::endl;
-  std::cout<<"Regions: "<<std::endl;
+  std::cout<<"Regions: "<<read_in_settings.list_of_region_bounds.size()<<std::endl;
   for(int ii = 0; ii < read_in_settings.list_of_region_bounds.size();ii++) {
     std::cout<<" "<<ii<<": ";
     for(int jj = 0; jj < read_in_settings.list_of_region_bounds[ii].size(); jj++) {
@@ -168,6 +191,18 @@ InputSettings readInputFile(std::string file_name) {
     std::cout<<std::endl;
   }
   std::cout<<"Number of individual grains listed: "<<read_in_settings.list_of_individual_grains.size()<<std::endl;
+
+  std::cout<<"Walls: "<<read_in_settings.list_of_walls.size()<<std::endl;
+  for(int ii = 0; ii < read_in_settings.list_of_walls.size();ii++) {
+    std::cout<<" "<<ii<<": ";
+    for(int jj = 0; jj < read_in_settings.list_of_walls[ii].size(); jj++) {
+      std::cout<<read_in_settings.list_of_walls[ii][jj];
+      if(jj < read_in_settings.list_of_walls[ii].size()-1)
+        std::cout<<",";
+    }
+    std::cout<<std::endl;
+  }
+
   std::cout<<"Integrator settings: "<<std::endl;
   valueCheck(read_in_settings.dt,"dt");
   valueCheck(read_in_settings.t_f,"t_f");
@@ -180,6 +215,8 @@ InputSettings readInputFile(std::string file_name) {
   valueCheck(read_in_settings.m_mu,"mu");
   valueCheck(read_in_settings.m_rho,"rho");
   valueCheck(read_in_settings.freq,"freq");
+  std::cout<<"out_forces: "<<read_in_settings.out_forces<<std::endl;
+
 
   return read_in_settings;
 

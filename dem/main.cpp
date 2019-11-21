@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
 #include "outputWriter.h"
-#include "inputParser.h"
+#include "InputReader.h"
 #include "InputSettings.h"
 #include "Region.h"
 #include <random>
@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
 
   // Write initial configuration
   for(int region_num = 0; region_num < num_regions; region_num++) {
+    region_list[region_num].m_walls = settings.list_of_walls;
     std::string prefix = "grain";
     prefix.append(std::to_string(region_num));
     prefix.append("_");
@@ -175,7 +176,8 @@ int main(int argc, char *argv[]) {
 
     #pragma omp parallel for
     for(int region = 0; region < num_regions; region++) {
-      region_list[region].calculateContactForces();
+      //region_list[region].calculateContactForces();
+      region_list[region].calculateContactForcesWithContactObjects();
     }
     double end_forces = omp_get_wtime();
 
@@ -243,12 +245,17 @@ int main(int argc, char *argv[]) {
     if(step_num % skip == 0){
       //std::cout<<"output: "<<output_num<<" "<<t<<std::endl;
       for(int region_num = 0; region_num < num_regions; region_num++) {
-        std::string prefix = "grain";
-        prefix.append(std::to_string(region_num));
-        prefix.append("_");
+        std::string prefix = "grain"; prefix.append(std::to_string(region_num)); prefix.append("_");
         std::string output_region_grain_str = generateOutputFileStr(prefix,freq,t_f,dt,output_num);
         writeGrainsVTU(output_region_grain_str,region_list[region_num].m_q,region_list[region_num].m_v,
                        region_list[region_num].m_r,region_list[region_num].m_unique_id,region_list[region_num].m_f);
+
+
+        if(settings.out_forces) {
+          std::string force_prefix = "force"; force_prefix.append(std::to_string(region_num)); force_prefix.append("_");
+          std::string output_region_force_str = generateOutputFileStr(force_prefix,freq,t_f,dt,output_num);
+          writeForcesVTU(output_region_force_str,region_list[region_num].m_contacts_grain_grain,region_list[region_num].m_contacts_grain_wall);
+        }
 
       }
       output_num++;

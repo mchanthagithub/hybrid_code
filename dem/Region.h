@@ -38,18 +38,25 @@ struct GrainCollection {
 struct ContactGrainGrain {
   int grain_idx_1;
   int grain_idx_2;
+  bool is_neighbor_1;
+  bool is_neighbor_2;
   std::vector<double> n{0.0,0.0};
+  std::vector<double> v_rel{0.0,0.0};
   std::vector<double> contact_pt{0.0,0.0};
   double overlap;
   double s;
+  std::vector<double> force{0.0,0.0};
 };
 
 struct ContactGrainWall {
-  int grain_idx_1;
+  int grain_idx;
+  int wall_idx;
   std::vector<double> n{0.0,0.0};
+  std::vector<double> v_rel{0.0,0.0};
   std::vector<double> contact_pt{0.0,0.0};
   double overlap;
   double s;
+  std::vector<double> force{0.0,0.0};
 };
 
 class Region {
@@ -126,6 +133,7 @@ public:
   // Bounds of region
   std::vector<double> m_region_min;
   std::vector<double> m_region_max;
+  std::vector< std::vector<double> > m_walls;
 
   // Holds the list of grains that intersect each bin
   std::vector<std::vector<int>> m_bin_list;
@@ -153,9 +161,11 @@ public:
   // Quantities for surrounding grains
   GrainCollection m_surrounding_collection;
 
+  std::map<std::pair<int,int>,ContactGrainGrain> m_contacts_grain_grain; // Key are the unique IDs
+  std::map<std::pair<int,int>,ContactGrainGrain> m_contacts_grain_grain_cache; // Key are the unique IDs; from last timestep
 
-  std::map<std::pair<int,int>,ContactGrainGrain> m_contacts; // Key are the unique IDs
-  std::map<std::pair<int,int>,ContactGrainGrain> m_contacts_cache; // Key are the unique IDs; from last timestep
+  std::map<std::pair<int,int>,ContactGrainWall> m_contacts_grain_wall; // Key are the unique IDs
+  std::map<std::pair<int,int>,ContactGrainWall> m_contacts_grain_wall_cache; // Key are the unique IDs; from last timestep
 
   // Material parameters
   double k_n = 1000000.0;
