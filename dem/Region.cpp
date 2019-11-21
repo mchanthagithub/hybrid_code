@@ -699,9 +699,9 @@ void Region::buildContactListWithContactObjects()
         r_2 = m_r[check_id];
       } else {
         unique_id_2 = m_surrounding_collection.unique_id[surround_id];
-        x_coord_2 = m_surrounding_collection.q[check_id*2];
-        y_coord_2 = m_surrounding_collection.q[check_id*2+1];
-        r_2 = m_surrounding_collection.r[check_id];
+        x_coord_2 = m_surrounding_collection.q[surround_id*2];
+        y_coord_2 = m_surrounding_collection.q[surround_id*2+1];
+        r_2 = m_surrounding_collection.r[surround_id];
         surround_unique_id = m_surrounding_collection.unique_id[surround_id];
       }
 
